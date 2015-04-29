@@ -1,2 +1,2 @@
-web: go-heroku-example
+web: proxy
 worker: worker
