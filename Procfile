@@ -1,2 +1,2 @@
 web: proxy
-#worker: worker
+worker: 
