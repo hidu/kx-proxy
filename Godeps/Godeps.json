@@ -1,5 +1,5 @@
 {
-	"ImportPath": "github.com/kr/go-heroku-example",
+	"ImportPath": "github.com/hidu/pproxy/serve",
 	"GoVersion": "go1.4.2",
 	"Deps": []
 }
