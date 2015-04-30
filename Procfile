@@ -1,2 +1,1 @@
-web: proxy
-worker: worker
+web: gopee
