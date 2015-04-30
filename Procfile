@@ -1,1 +1,1 @@
-web: gopee
+web: web
