@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 func main() {
@@ -21,8 +22,12 @@ func main() {
 
 func requestHanderFunc(r *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 	urlOld := r.URL.String()
+	proxy:="https://vast-scrubland-8450.herokuapp.com"
+	if(strings.HasPrefix(urlOld,proxy)){
+		return r,nil
+	]
 	var urlReq = base64.StdEncoding.EncodeToString([]byte(urlOld))
-	urlNew := "https://vast-scrubland-8450.herokuapp.com/p/" + urlReq
+	urlNew := proxy+"/p/" + urlReq
 	log.Println(urlOld, "--->", urlNew)
 	var err error
 	r.URL, err = url.Parse(urlNew)
