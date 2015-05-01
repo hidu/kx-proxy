@@ -12,6 +12,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"time"
 )
 
 // Cache templates
@@ -23,6 +24,10 @@ var reHTML = regexp.MustCompile("src=[\"\\'](.*?)[\"\\']|href=[\"\\'](.*?)[\"\\'
 var reCSS = regexp.MustCompile("url\\([\"\\']?(.*?)[\"\\']?\\)")
 
 var httpClient *http.Client = &http.Client{}
+
+var startTime=time.Now()
+
+var etag=fmt.Sprintf("%d",startTime.Unix())
 
 func homeHandler(w http.ResponseWriter, r *http.Request) {
 	// 404 for all other url path
@@ -42,6 +47,16 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/p/"+encodedUrl, 302)
 		return
 	}
+	w.Header().Set("Cache-Control","max-age=2592000")
+	
+	etagClient := r.Header.Get("If-None-Match")
+	if(etagClient!=""){
+		if(etag==etagClient){
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+	}
+	w.Header().Set("etag",etag)
 	templates.ExecuteTemplate(w, "home.html", nil)
 }
 
@@ -175,6 +190,7 @@ func main() {
 	http.HandleFunc("/p/", proxyHandler)
 
 	http.HandleFunc("/assets/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control","max-age=2592000")
 		http.ServeFile(w, r, r.URL.Path[1:])
 	})
 
