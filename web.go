@@ -84,6 +84,10 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	req.Header.Set("Content-Type", r.Header.Get("Content-Type"))
 	// Set request user agent to that of user's
 	req.Header.Set("User-Agent", r.Header.Get("User-Agent"))
+	is_client := r.Header.Get("is_client") == "1"
+	if(is_client){
+		req.Header.Del("is_client")
+	}
 
 	resp, err := httpClient.Do(req)
 
@@ -103,6 +107,11 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 		if headerKey == "Content-Type" {
 			contentType = headerVal
 		}
+	}
+	
+	if is_client {
+		io.Copy(w, resp.Body)
+		return
 	}
 
 	// Rewrite all urls
