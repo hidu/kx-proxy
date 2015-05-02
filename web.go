@@ -181,7 +181,7 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	//	var httpHost string = os.Getenv("HOST")
+	var httpHost string = os.Getenv("HOST")
 	var httpPort string = os.Getenv("PORT")
 	if httpPort == "" {
 		httpPort = "8080"
@@ -196,6 +196,6 @@ func main() {
 
 	fmt.Printf("web proxy listening on :%s\n", httpPort)
 
-	http.ListenAndServe(":"+httpPort, nil)
+	http.ListenAndServe(httpHost+":"+httpPort, nil)
 
 }
