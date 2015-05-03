@@ -25,9 +25,9 @@ var reCSS = regexp.MustCompile("url\\([\"\\']?(.*?)[\"\\']?\\)")
 
 var httpClient *http.Client = &http.Client{}
 
-var startTime=time.Now()
+var startTime = time.Now()
 
-var etag=fmt.Sprintf("%d",startTime.Unix())
+var etag = fmt.Sprintf("%d", startTime.Unix())
 
 func homeHandler(w http.ResponseWriter, r *http.Request) {
 	// 404 for all other url path
@@ -47,16 +47,16 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/p/"+encodedUrl, 302)
 		return
 	}
-	w.Header().Set("Cache-Control","max-age=2592000")
-	
+	w.Header().Set("Cache-Control", "max-age=2592000")
+
 	etagClient := r.Header.Get("If-None-Match")
-	if(etagClient!=""){
-		if(etag==etagClient){
+	if etagClient != "" {
+		if etag == etagClient {
 			w.WriteHeader(http.StatusNotModified)
 			return
 		}
 	}
-	w.Header().Set("etag",etag)
+	w.Header().Set("etag", etag)
 	templates.ExecuteTemplate(w, "home.html", nil)
 }
 
@@ -100,7 +100,7 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	// Set request user agent to that of user's
 	req.Header.Set("User-Agent", r.Header.Get("User-Agent"))
 	is_client := r.Header.Get("is_client") == "1"
-	if(is_client){
+	if is_client {
 		req.Header.Del("is_client")
 	}
 
@@ -123,9 +123,13 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 			contentType = headerVal
 		}
 	}
-	
+
 	if is_client {
-		io.Copy(w, resp.Body)
+		if is_replace, body := googleApis(resp); is_replace {
+			w.Write(body)
+		} else {
+			io.Copy(w, resp.Body)
+		}
 		return
 	}
 
@@ -180,6 +184,20 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func googleApis(resp *http.Response) (bool, []byte) {
+	contentType := resp.Header.Get("Content-Type")
+	if !strings.Contains(contentType, "text/html") {
+		return false, []byte("")
+	}
+	body, _ := ioutil.ReadAll(resp.Body)
+	body=bytes.Replace(body,[]byte("https://ajax.googleapis.com/"),[]byte("http://ajax.useso.com/"),-1)
+	body=bytes.Replace(body,[]byte("http://ajax.googleapis.com/"),[]byte("http://ajax.useso.com/"),-1)
+	body=bytes.Replace(body,[]byte("https://fonts.googleapis.com/"),[]byte("http://fonts.useso.com/"),-1)
+	body=bytes.Replace(body,[]byte("http://fonts.googleapis.com/"),[]byte("http://fonts.useso.com/"),-1)
+	
+	return true, body
+}
+
 func main() {
 	var httpHost string = os.Getenv("HOST")
 	var httpPort string = os.Getenv("PORT")
@@ -190,7 +208,7 @@ func main() {
 	http.HandleFunc("/p/", proxyHandler)
 
 	http.HandleFunc("/assets/", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cache-Control","max-age=2592000")
+		w.Header().Set("Cache-Control", "max-age=2592000")
 		http.ServeFile(w, r, r.URL.Path[1:])
 	})
 
