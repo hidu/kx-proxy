@@ -17,15 +17,16 @@ import (
 
 var confPath = flag.String("conf", "conf.json", "json conf")
 var verbose = flag.Bool("v", false, "should every proxy request be logged to stdout")
-var addr = flag.String("addr", ":3308", "proxy listen address")
+var addr = flag.String("addr", ":8080", "proxy listen address")
 
 var reHTML = regexp.MustCompile("src=[\"\\'](.*?)[\"\\']|href=[\"\\'](.*?)[\"\\']|action=[\"\\'](.*?)[\"\\']")
 
 type ClientConf struct {
-	Proxies   []ProxyItem `json:"proxy"`
-	Proxy_All []string
-	Total     int
-	CDN_ALL   map[string]string `json:"cdn"`
+	Proxies     []ProxyItem `json:"proxy"`
+	Proxy_All   []string
+	Total       int
+	CDN_ALL     map[string]string `json:"cdn"`
+	ParentProxy string            `json:"parent"`
 }
 
 type ProxyItem struct {
@@ -79,31 +80,26 @@ func loadConf() {
 	log.Println("load conf success")
 }
 
-func main() {
-	flag.Parse()
-	loadConf()
+var MitmConnect = &goproxy.ConnectAction{
+	Action:    goproxy.ConnectMitm,
+	TLSConfig: goproxy.TLSConfigFromCA(&GoproxyCa),
+}
 
-	proxy := goproxy.NewProxyHttpServer()
-	proxy.Verbose = *verbose
-	proxy.OnRequest().DoFunc(requestHanderFunc)
-	proxy.OnResponse().DoFunc(responseHanderFunc)
-
-	log.Println("proxy client listen at ", *addr)
-
-	log.Fatal(http.ListenAndServe(*addr, proxy))
+var AlwaysMitm goproxy.FuncHttpsHandler = func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
+	log.Println("https conn", host, ctx.Req.URL.String())
+	return MitmConnect, host
 }
 
 func responseHanderFunc(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
 	if resp != nil {
 		resp.Header.Set("Connection", "close")
 	}
-
 	return resp
 }
 
 func requestHanderFunc(r *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 	urlOld := r.URL.String()
-
+	log.Println("url->", urlOld)
 	r.Header.Del("Connection")
 	r.Header.Del("Proxy-Connection")
 
@@ -129,4 +125,25 @@ func requestHanderFunc(r *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *
 		log.Println("parse new url failed", err)
 	}
 	return r, nil
+}
+
+func main() {
+	flag.Parse()
+	loadConf()
+
+	proxy := goproxy.NewProxyHttpServer()
+	proxy.Verbose = *verbose
+	proxy.OnRequest().HandleConnectFunc(AlwaysMitm)
+	proxy.OnRequest().DoFunc(requestHanderFunc)
+	proxy.OnResponse().DoFunc(responseHanderFunc)
+	if conf.ParentProxy != "" {
+		proxy.Tr = &http.Transport{
+			Proxy: func(req *http.Request) (*url.URL, error) {
+				return url.Parse(conf.ParentProxy)
+			},
+		}
+	}
+	log.Println("proxy client listen at ", *addr)
+	err := http.ListenAndServe(*addr, proxy)
+	log.Fatal(err)
 }

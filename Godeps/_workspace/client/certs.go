@@ -1,0 +1,75 @@
+package main
+
+import (
+	"crypto/tls"
+	"crypto/x509"
+)
+
+func init() {
+	if goproxyCaErr != nil {
+		panic("Error parsing builtin CA " + goproxyCaErr.Error())
+	}
+	var err error
+	if GoproxyCa.Leaf, err = x509.ParseCertificate(GoproxyCa.Certificate[0]); err != nil {
+		panic("Error parsing builtin CA " + err.Error())
+	}
+}
+
+var tlsClientSkipVerify = &tls.Config{InsecureSkipVerify: true}
+
+var defaultTLSConfig = &tls.Config{
+	InsecureSkipVerify: true,
+}
+
+var CA_CERT = []byte(`-----BEGIN CERTIFICATE-----
+MIIDnzCCAoegAwIBAgIJAKBuAUr+T7ouMA0GCSqGSIb3DQEBBQUAMGYxCzAJBgNV
+BAYTAlhYMRUwEwYDVQQHDAxEZWZhdWx0IENpdHkxHzAdBgNVBAoMFmdpdGh1Yi5j
+b20vaGlkdS9wcHJveHkxHzAdBgNVBAMMFmdpdGh1Yi5jb20vaGlkdS9wcHJveHkw
+HhcNMTUwNTAzMTUxMDM3WhcNMjUwNDMwMTUxMDM3WjBmMQswCQYDVQQGEwJYWDEV
+MBMGA1UEBwwMRGVmYXVsdCBDaXR5MR8wHQYDVQQKDBZnaXRodWIuY29tL2hpZHUv
+cHByb3h5MR8wHQYDVQQDDBZnaXRodWIuY29tL2hpZHUvcHByb3h5MIIBIjANBgkq
+hkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0JsXsBi/sfgCRqfeSeff1almRidf0wZn
+jt/2htKmjzluJ/f0+irK20AOI4aCtLg+zKopJ8aekwqeo2vm8k9Ht8xWcX6g7I6Y
+ZNEDVjrFPlcZd+HFfZ2ItH70YAJQInMHqEWrrNCNR/ndHnlQg+HUrA+od3HjiegQ
+u/OmVVPaSGiytAFc9QzqCuYPtKOZvCn6KBPX3mXbrBnWf0ASpz7ndRPRfYP0MU0u
+t+AfNcj4/lDvSDOKFVbUSe6Prx4cv4HkcQuPngzqHO4el6ABf0ZWJjBwvZFWW14X
+EJ1Jx2ODJmY+Aq3/yq9Z9MjnuVBs7QjoHIqUMuzWeC7MSBZUC5x5SQIDAQABo1Aw
+TjAdBgNVHQ4EFgQUXHNOovxL+NAVXguLVvH+c6Up+YUwHwYDVR0jBBgwFoAUXHNO
+ovxL+NAVXguLVvH+c6Up+YUwDAYDVR0TBAUwAwEB/zANBgkqhkiG9w0BAQUFAAOC
+AQEAm1KOjuRKJRjUgSckYf1CpGrrSK+YRycspPfTg8EZ10TER9ojGj8xF5QYWg50
+DYgFqx5bWLmytIzf+Ob1Ai6w19i+LvuKo2+vAjBm8QfVrqr/wdzDIhBCj+viY/ib
+7OGTEjAPMk149cy/mu+8ta63dGrX15bIBLfS42ntnTlfNVi2UdtSt0HbkBhzu8lo
+wG3HTwWbFLy8TH/mhTuaFE9CqLzYUA+Lyk2/JDKnhHRpkDPgjiZNidQfDP80IMN/
+CAlc/f1kBV1FHOUSQgzaiSKoi3ypsV+fnLNENz+cjBEEgIi3B/daRH+tVqQvh/8R
+LvYTFF4bAcdouYi0y2leXfHhpw==
+-----END CERTIFICATE-----`)
+
+var CA_KEY = []byte(`-----BEGIN RSA PRIVATE KEY-----
+MIIEpAIBAAKCAQEA0JsXsBi/sfgCRqfeSeff1almRidf0wZnjt/2htKmjzluJ/f0
++irK20AOI4aCtLg+zKopJ8aekwqeo2vm8k9Ht8xWcX6g7I6YZNEDVjrFPlcZd+HF
+fZ2ItH70YAJQInMHqEWrrNCNR/ndHnlQg+HUrA+od3HjiegQu/OmVVPaSGiytAFc
+9QzqCuYPtKOZvCn6KBPX3mXbrBnWf0ASpz7ndRPRfYP0MU0ut+AfNcj4/lDvSDOK
+FVbUSe6Prx4cv4HkcQuPngzqHO4el6ABf0ZWJjBwvZFWW14XEJ1Jx2ODJmY+Aq3/
+yq9Z9MjnuVBs7QjoHIqUMuzWeC7MSBZUC5x5SQIDAQABAoIBAQC8EngCze1WOLFk
+nkgs/Z6ydW295hXgna+UApuy5gxAqJiF9GmrehU2IsQch1MkN9B2mRtNvyaMj1CD
+Ke8nmw6fyNxOqsnPPKhsjHyjq4zVLZXKnYR+Qh9UC/mq7artxCOtNFMZFVWrBLy0
+ks9id6JUFjHerpFkbhNYQM0/tL/h8tEoO4kanUbxq5un8F1Cl2NxRYCgIWvOG5NO
+UZVPtj6oyHUy4OJ33gNkEJ14HYD200F0iw8rhiug7ZKaXd8SSx4yEvOUCSQ+6pV6
+FJOQQLK8gn2V8YKLQNUbdtp4JoQSeaILf4KuWQ423UIW/WXIIoil222hCNnDNRaI
+WW5Pie25AoGBAPev8f6WY3sxpXHpNMrXKj7C0TVf+JQbESS3jMpNm+1iE2uAx99e
+6pXMbWH/7v8WjdLeIMGFNpsI2NCzbQ+cgfrH0SBNiPzelppGZDriqGuy2ezQ3Ypu
+pMMr5KyCP+BCoM5PKZQT2qWqiy1tB5mPPMUs45IJbG95G35vU3MmCeP7AoGBANeb
+XwGFImCDFzC53j08GZ+3MhNjLs+6HD75OAdLOmSwJH+NiDal5S2xzDXw+aSwYYv5
+Be8al5Vp+ulZJ2M3qmjlzXp4n8IxooftieDHCoyBILqrmoSHF0aVCyblsecdxQSl
+EL8VgDTFcngwZtJaxZc7Xqe2GmzamW1h330TmhCLAoGAV4Wup12Q7ZlPcv8LDpoV
+bXP95TRybDNcTXMmpt3huXIslpI9DmtFzYUdKcH8O9tGZjrjrD5cW1A2/RhJ83hE
+Xc950EZVn7Uv1ngFNuGczeG3K/1qK16JjgXWmja0R5SDqiNC9/ZEDsJCx9x9EQAS
+Y0JHb/Uwgftzgavo+wl3+T0CgYAr/eu4p62H+7dznbkWzXh8+ighhI88m0DAKKGh
++1uCx93qmLo+TEMiu7BrISwOyl5c7Qak7swXFHS5wBMlT2pZ1OnEH3CZcv8ytOj5
+ECO6324KKJFykQ3SvP51hVBzU8OrWvK7ymtKWS8uDtIsAZFndhmuJp3lsAS2KM4s
++x7oWQKBgQCUIcsrr9P5KCs8LTivHSZbw2bxBSAK/FLnRb/Z3iE0F0Cg7sfoqTBc
+mvT0W1Cn0FaXmt3IPk+hgdkKRYS/nocKdH1dAKOiI4sod69D0Ysrp8wRyNyoQRwr
+1OX1MV1VdU5DsC+wIE72U4p6ctAUaAaM4PH5NlHqLrDyHBVvK254Dg==
+-----END RSA PRIVATE KEY-----`)
+
+var GoproxyCa, goproxyCaErr = tls.X509KeyPair(CA_CERT, CA_KEY)

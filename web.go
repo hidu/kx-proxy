@@ -190,11 +190,11 @@ func googleApis(resp *http.Response) (bool, []byte) {
 		return false, []byte("")
 	}
 	body, _ := ioutil.ReadAll(resp.Body)
-	body=bytes.Replace(body,[]byte("https://ajax.googleapis.com/"),[]byte("http://ajax.useso.com/"),-1)
-	body=bytes.Replace(body,[]byte("http://ajax.googleapis.com/"),[]byte("http://ajax.useso.com/"),-1)
-	body=bytes.Replace(body,[]byte("https://fonts.googleapis.com/"),[]byte("http://fonts.useso.com/"),-1)
-	body=bytes.Replace(body,[]byte("http://fonts.googleapis.com/"),[]byte("http://fonts.useso.com/"),-1)
-	
+	body = bytes.Replace(body, []byte("https://ajax.googleapis.com/"), []byte("http://ajax.useso.com/"), -1)
+	body = bytes.Replace(body, []byte("http://ajax.googleapis.com/"), []byte("http://ajax.useso.com/"), -1)
+	body = bytes.Replace(body, []byte("https://fonts.googleapis.com/"), []byte("http://fonts.useso.com/"), -1)
+	body = bytes.Replace(body, []byte("http://fonts.googleapis.com/"), []byte("http://fonts.useso.com/"), -1)
+
 	return true, body
 }
 
