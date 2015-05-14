@@ -113,7 +113,7 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	req, _ := http.NewRequest(r.Method, urlString, r.Body)
 	
 	if(is_client){
-		copyHeader(r.Header, req.Header)
+		copyHeader(req.Header,r.Header)
 	}else{
 		req.Header.Set("Content-Type", r.Header.Get("Content-Type"))
 		// Set request user agent to that of user's
