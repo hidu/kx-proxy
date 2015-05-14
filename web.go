@@ -106,9 +106,10 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	req.Header.Set("User-Agent", r.Header.Get("User-Agent"))
 	
 	if(is_client){
-		for _,h:=range copyHeaders{
-			req.Header.Set(h, r.Header.Get(h))
-		}
+		req.Header=r.Header
+//		for _,h:=range copyHeaders{
+//			req.Header.Set(h, r.Header.Get(h))
+//		}
 	}
 
 	resp, err := httpClient.Do(req)
