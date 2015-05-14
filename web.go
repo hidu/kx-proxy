@@ -87,7 +87,17 @@ func encodeURL(src []byte, baseHref string, urlString string, start int, end int
 	return bytes.Replace(src, src[start:end], encodedPath, -1)
 }
 var copyHeaders=[]string{"Referer","Accept-Language","Cookie"}
+
+func copyHeaders(dst, src http.Header) {
+	for k, vs := range src {
+		for _, v := range vs {
+			dst.Add(k, v)
+		}
+	}
+}
+
 func proxyHandler(w http.ResponseWriter, r *http.Request) {
+	r.Header.Del("Connection")
 	encodedUrl := r.URL.Path[len("/p/"):]
 	url, err := base64.StdEncoding.DecodeString(encodedUrl)
 	if err != nil {
@@ -101,15 +111,13 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	
 	urlString := string(url[:])
 	req, _ := http.NewRequest(r.Method, urlString, r.Body)
-	req.Header.Set("Content-Type", r.Header.Get("Content-Type"))
-	// Set request user agent to that of user's
-	req.Header.Set("User-Agent", r.Header.Get("User-Agent"))
 	
 	if(is_client){
-		req.Header=r.Header
-//		for _,h:=range copyHeaders{
-//			req.Header.Set(h, r.Header.Get(h))
-//		}
+		copyHeaders(r.Header, req.Header)
+	}else{
+		req.Header.Set("Content-Type", r.Header.Get("Content-Type"))
+		// Set request user agent to that of user's
+		req.Header.Set("User-Agent", r.Header.Get("User-Agent"))
 	}
 
 	resp, err := httpClient.Do(req)

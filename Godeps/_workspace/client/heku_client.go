@@ -97,6 +97,14 @@ func responseHanderFunc(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Respon
 	return resp
 }
 
+func copyHeaders(dst, src http.Header) {
+	for k, vs := range src {
+		for _, v := range vs {
+			dst.Add(k, v)
+		}
+	}
+}
+
 func requestHanderFunc(r *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 	urlOld := r.URL.String()
 	log.Println("url->", urlOld)
