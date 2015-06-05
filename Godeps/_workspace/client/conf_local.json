@@ -1,0 +1,10 @@
+{
+    "proxy":[
+        {"url":"http://127.0.0.1:8085/","weight":1}
+    ],
+    "cdn":{
+        "ajax.googleapis.com":"ajax.useso.com",
+        "fonts.googleapis.com":"fonts.useso.com"
+    },
+    "parent":""
+}

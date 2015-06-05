@@ -119,7 +119,7 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 		// Set request user agent to that of user's
 		req.Header.Set("User-Agent", r.Header.Get("User-Agent"))
 	}
-
+	
 	resp, err := httpClient.Do(req)
 
 	if err != nil {
@@ -132,20 +132,21 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	contentType := ""
 
 	//Write all remote resp header to client
-	for headerKey := range resp.Header {
+	for headerKey,vs := range resp.Header {
 		headerVal := resp.Header.Get(headerKey)
-		w.Header().Set(headerKey, headerVal)
 		if headerKey == "Content-Type" {
 			contentType = headerVal
 		}
-	}
-
-	if is_client {
-		if is_replace, body := googleApis(resp); is_replace {
-			w.Write(body)
-		} else {
-			io.Copy(w, resp.Body)
+		for _,v:=range vs{
+			w.Header().Add(headerKey,v)
 		}
+	}
+	if is_client {
+//		if is_replace, body := googleApis(resp); is_replace {
+//			w.Write(body)
+//		} else {
+			io.Copy(w, resp.Body)
+//		}
 		return
 	}
 
@@ -218,7 +219,7 @@ func main() {
 	var httpHost string = os.Getenv("HOST")
 	var httpPort string = os.Getenv("PORT")
 	if httpPort == "" {
-		httpPort = "8080"
+		httpPort = "8085"
 	}
 	http.HandleFunc("/", homeHandler)
 	http.HandleFunc("/p/", proxyHandler)

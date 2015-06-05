@@ -108,7 +108,7 @@ func copyHeaders(dst, src http.Header) {
 func requestHanderFunc(r *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 	urlOld := r.URL.String()
 	log.Println("url->", urlOld)
-	r.Header.Del("Connection")
+	r.Header.Set("Connection","Close")
 	r.Header.Del("Proxy-Connection")
 
 	if conf.IsProxyHost(urlOld) {
