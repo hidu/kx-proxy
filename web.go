@@ -153,6 +153,7 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 			w.Header().Add(headerKey,v)
 		}
 	}
+	w.WriteHeader(resp.StatusCode)
 	if is_client {
 //		if is_replace, body := googleApis(resp); is_replace {
 //			w.Write(body)
