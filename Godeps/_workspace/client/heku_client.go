@@ -27,6 +27,7 @@ type ClientConf struct {
 	Total       int
 	CDN_ALL     map[string]string `json:"cdn"`
 	ParentProxy string            `json:"parent"`
+	SSlOn	    string `json:"ssl"`
 }
 
 type ProxyItem struct {
@@ -67,11 +68,11 @@ func loadConf() {
 		log.Fatalln("no hosts")
 	}
 	for _, item := range conf.Proxies {
-		weight := item.Weight
-		if weight < 1 {
-			weight = 1
+		if item.Weight < 1 {
+			log.Println("skip ",item.Url)
+			continue
 		}
-		for i := 0; i < weight; i++ {
+		for i := 0; i < item.Weight; i++ {
 			conf.Proxy_All = append(conf.Proxy_All, strings.TrimRight(item.Url, "/"))
 		}
 	}
@@ -85,9 +86,18 @@ var MitmConnect = &goproxy.ConnectAction{
 	TLSConfig: goproxy.TLSConfigFromCA(&GoproxyCa),
 }
 
+
 var AlwaysMitm goproxy.FuncHttpsHandler = func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
 	log.Println("https conn", host, ctx.Req.URL.String())
 	return MitmConnect, host
+}
+
+var HttpMitmConnect = &goproxy.ConnectAction{
+	Action:    goproxy.ConnectHTTPMitm,
+}
+var AlwaysHttpMitm goproxy.FuncHttpsHandler = func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
+	log.Println("https conn", host, ctx.Req.URL.String())
+	return HttpMitmConnect, host
 }
 
 func responseHanderFunc(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
@@ -141,7 +151,11 @@ func main() {
 
 	proxy := goproxy.NewProxyHttpServer()
 	proxy.Verbose = *verbose
-	proxy.OnRequest().HandleConnectFunc(AlwaysMitm)
+	if(conf.SSlOn=="on"){
+		proxy.OnRequest().HandleConnectFunc(AlwaysMitm)
+	}else{
+		proxy.OnRequest().HandleConnectFunc(AlwaysHttpMitm)
+	}
 	proxy.OnRequest().DoFunc(requestHanderFunc)
 	proxy.OnResponse().DoFunc(responseHanderFunc)
 	if conf.ParentProxy != "" {

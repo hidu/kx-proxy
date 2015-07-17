@@ -7,5 +7,6 @@
         "ajax.googleapis.com":"ajax.useso.com",
         "fonts.googleapis.com":"fonts.useso.com"
     },
-    "parent":""
+    "parent":"",
+    "ssl":"off"
 }

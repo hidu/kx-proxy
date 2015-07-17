@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"net"
 )
 
 // Cache templates
@@ -120,7 +121,18 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 		req.Header.Set("User-Agent", r.Header.Get("User-Agent"))
 	}
 	
-	resp, err := httpClient.Do(req)
+//	resp, err := httpClient.Do(req)
+	
+	transport := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		Dial: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).Dial,
+		TLSHandshakeTimeout: 10 * time.Second,
+	}
+	resp, err:=transport.RoundTrip(req)
+	
 
 	if err != nil {
 		fmt.Println("Error Fetching " + urlString)
