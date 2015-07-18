@@ -3,11 +3,14 @@
 
 You can deploy it to heroku with the following commands:
 ```
-$ git clone https://github.com/hidu/kx-proxy.git
-$ cd heku-proxy
-$ heroku create -b https://github.com/kr/heroku-buildpack-go.git
-$ git push heroku master
-$ heroku open
+$ git clone https://git.heroku.com/{your-app-name}.git
+$ cd {your-app-name}
+$ git remote add kxproxy https://github.com/hidu/kx-proxy.git
+$ git pull kxproxy
+$ git merge kxproxy/master
+$ godep
+$ echo "web:"$(basename `pwd`) >Procfile
+$ git push origin master
 ```
 
 proxy client:
