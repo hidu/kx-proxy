@@ -1,1 +1,1 @@
-web: vast-scrubland-8450
+web: kx-proxy

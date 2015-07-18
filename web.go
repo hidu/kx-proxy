@@ -1,25 +1,40 @@
+/**
+*
+*kexue shang wang
+*
+*use some gopee code: github.com/madhurjain/gopee
+*
+ */
 package main
 
 import (
 	"bytes"
 	"encoding/base64"
+	"flag"
 	"fmt"
-	"html/template"
 	"io"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"regexp"
 	"strings"
 	"time"
-	"net"
+	"log"
 )
 
-// Cache templates
-var templates = template.Must(template.ParseFiles("home.html"))
+var indexPage []byte
+var secreKeys=make(map[string]int)
 
-// Pre-compile RegEx
+func init(){
+	indexPage,_=ioutil.ReadFile("index.html")
+	keys:=loadTxtConf("keys.txt")
+	for _,key:=range keys{
+		secreKeys[key]=1
+	}
+}
+
 var reBase = regexp.MustCompile("base +href=\"(.*?)\"")
 var reHTML = regexp.MustCompile("src=[\"\\'](.*?)[\"\\']|href=[\"\\'](.*?)[\"\\']|action=[\"\\'](.*?)[\"\\']")
 var reCSS = regexp.MustCompile("url\\([\"\\']?(.*?)[\"\\']?\\)")
@@ -58,7 +73,7 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	w.Header().Set("etag", etag)
-	templates.ExecuteTemplate(w, "home.html", nil)
+	w.Write(indexPage)
 }
 
 func encodeURL(src []byte, baseHref string, urlString string, start int, end int) []byte {
@@ -87,7 +102,8 @@ func encodeURL(src []byte, baseHref string, urlString string, start int, end int
 	base64.StdEncoding.Encode(encodedPath, src[start:end])
 	return bytes.Replace(src, src[start:end], encodedPath, -1)
 }
-var copyHeaders=[]string{"Referer","Accept-Language","Cookie"}
+
+var copyHeaders = []string{"Referer", "Accept-Language", "Cookie"}
 
 func copyHeader(dst, src http.Header) {
 	for k, vs := range src {
@@ -96,6 +112,7 @@ func copyHeader(dst, src http.Header) {
 		}
 	}
 }
+var KxKey="KxKey"
 
 func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	r.Header.Del("Connection")
@@ -105,23 +122,32 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	
 	is_client := r.Header.Get("is_client") == "1"
 	if is_client {
 		r.Header.Del("is_client")
+		if(len(secreKeys)>0){
+			skey:=r.Header.Get(KxKey)
+			r.Header.Del(KxKey)
+			
+			_,hasSkey:=secreKeys[skey]
+			if(skey=="" || !hasSkey){
+				w.WriteHeader(http.StatusForbidden)
+				return;
+			}
+		}
 	}
-	
+
 	urlString := string(url[:])
 	req, _ := http.NewRequest(r.Method, urlString, r.Body)
-	
-	if(is_client){
-		copyHeader(req.Header,r.Header)
-	}else{
+
+	if is_client {
+		copyHeader(req.Header, r.Header)
+	} else {
 		req.Header.Set("Content-Type", r.Header.Get("Content-Type"))
-		// Set request user agent to that of user's
 		req.Header.Set("User-Agent", r.Header.Get("User-Agent"))
 	}
 	
-//	resp, err := httpClient.Do(req)
 	
 	transport := &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
@@ -131,8 +157,7 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 		}).Dial,
 		TLSHandshakeTimeout: 10 * time.Second,
 	}
-	resp, err:=transport.RoundTrip(req)
-	
+	resp, err := transport.RoundTrip(req)
 
 	if err != nil {
 		fmt.Println("Error Fetching " + urlString)
@@ -144,22 +169,18 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	contentType := ""
 
 	//Write all remote resp header to client
-	for headerKey,vs := range resp.Header {
+	for headerKey, vs := range resp.Header {
 		headerVal := resp.Header.Get(headerKey)
 		if headerKey == "Content-Type" {
 			contentType = headerVal
 		}
-		for _,v:=range vs{
-			w.Header().Add(headerKey,v)
+		for _, v := range vs {
+			w.Header().Add(headerKey, v)
 		}
 	}
 	w.WriteHeader(resp.StatusCode)
 	if is_client {
-//		if is_replace, body := googleApis(resp); is_replace {
-//			w.Write(body)
-//		} else {
-			io.Copy(w, resp.Body)
-//		}
+		io.Copy(w, resp.Body)
 		return
 	}
 
@@ -212,38 +233,60 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	} else {
 		io.Copy(w, resp.Body)
 	}
+
 }
 
-func googleApis(resp *http.Response) (bool, []byte) {
-	contentType := resp.Header.Get("Content-Type")
-	if !strings.Contains(contentType, "text/html") {
-		return false, []byte("")
-	}
-	body, _ := ioutil.ReadAll(resp.Body)
-	body = bytes.Replace(body, []byte("https://ajax.googleapis.com/"), []byte("http://ajax.useso.com/"), -1)
-	body = bytes.Replace(body, []byte("http://ajax.googleapis.com/"), []byte("http://ajax.useso.com/"), -1)
-	body = bytes.Replace(body, []byte("https://fonts.googleapis.com/"), []byte("http://fonts.useso.com/"), -1)
-	body = bytes.Replace(body, []byte("http://fonts.googleapis.com/"), []byte("http://fonts.useso.com/"), -1)
-
-	return true, body
-}
+var addr = flag.String("addr", ":8085", "listen addr,eg :8085")
 
 func main() {
+	flag.Parse()
+
 	var httpHost string = os.Getenv("HOST")
 	var httpPort string = os.Getenv("PORT")
+
+	laddr := httpHost + ":" + httpPort
+
 	if httpPort == "" {
-		httpPort = "8085"
+		laddr = *addr
 	}
+
+	if len(laddr) < 2 {
+		fmt.Println("listening addr [", laddr, "] is wrong")
+		os.Exit(1)
+	}
+
 	http.HandleFunc("/", homeHandler)
 	http.HandleFunc("/p/", proxyHandler)
-
+	
 	http.HandleFunc("/assets/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "max-age=2592000")
 		http.ServeFile(w, r, r.URL.Path[1:])
 	})
 
-	fmt.Printf("web proxy listening on :%s\n", httpPort)
+	fmt.Printf("heku-proxy listening on :%s\n", laddr)
 
-	http.ListenAndServe(httpHost+":"+httpPort, nil)
+	err:=http.ListenAndServe(laddr, nil)
+	fmt.Println("exit with err:",err)
+}
 
+
+func loadTxtConf(confPath string)[]string{
+	lines:=make([]string,0)
+	datas,err:=ioutil.ReadFile(confPath)
+	if(err!=nil){
+		log.Fatalln(err)
+	}
+	ls:=bytes.Split(datas,[]byte("\n"))
+	for _,lineBs:=range ls{
+		index:=bytes.IndexByte(lineBs,'#')
+		if(index>-1){
+			lineBs=lineBs[:index]
+		}
+		lineBs=bytes.TrimSpace(lineBs)
+		if(len(lineBs)==0){
+		 	continue
+		}
+		lines=append(lines,string(lineBs))
+	}
+	return lines
 }
