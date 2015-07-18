@@ -23,4 +23,7 @@ _testmain.go
 *.test
 *.prof
 .*.md.html
+
+Godeps
 keys.txt
+Procfile
