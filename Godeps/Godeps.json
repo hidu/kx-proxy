@@ -1,5 +1,5 @@
 {
 	"ImportPath": "git.heroku.com/vast-scrubland-8450",
-	"GoVersion": "go1.4.2",
+	"GoVersion": "go1.4",
 	"Deps": []
 }
