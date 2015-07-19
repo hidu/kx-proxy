@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -21,17 +22,16 @@ import (
 	"regexp"
 	"strings"
 	"time"
-	"log"
 )
 
 var indexPage []byte
-var secreKeys=make(map[string]int)
+var secreKeys = make(map[string]int)
 
-func init(){
-	indexPage,_=ioutil.ReadFile("index.html")
-	keys:=loadTxtConf("keys.txt")
-	for _,key:=range keys{
-		secreKeys[key]=1
+func init() {
+	indexPage, _ = ioutil.ReadFile("index.html")
+	keys := loadTxtConf("keys.txt")
+	for _, key := range keys {
+		secreKeys[key] = 1
 	}
 }
 
@@ -112,7 +112,8 @@ func copyHeader(dst, src http.Header) {
 		}
 	}
 }
-var KxKey="KxKey"
+
+var KxKey = "KxKey"
 
 func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	r.Header.Del("Connection")
@@ -122,20 +123,20 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	
+
 	is_client := r.Header.Get("is_client") == "1"
 	if is_client {
 		r.Header.Del("is_client")
-		if(len(secreKeys)>0){
-			skey:=r.Header.Get(KxKey)
-			r.Header.Del(KxKey)
-			
-			_,hasSkey:=secreKeys[skey]
-			if(skey=="" || !hasSkey){
+		if len(secreKeys) > 0 {
+			skey := r.Header.Get(KxKey)
+			_, hasSkey := secreKeys[skey]
+			if skey == "" || !hasSkey {
 				w.WriteHeader(http.StatusForbidden)
-				return;
+				w.Write([]byte(r.Host + " required " + KxKey))
+				return
 			}
 		}
+		r.Header.Del(KxKey)
 	}
 
 	urlString := string(url[:])
@@ -147,8 +148,7 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 		req.Header.Set("Content-Type", r.Header.Get("Content-Type"))
 		req.Header.Set("User-Agent", r.Header.Get("User-Agent"))
 	}
-	
-	
+
 	transport := &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
 		Dial: (&net.Dialer{
@@ -257,7 +257,7 @@ func main() {
 
 	http.HandleFunc("/", homeHandler)
 	http.HandleFunc("/p/", proxyHandler)
-	
+
 	http.HandleFunc("/assets/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "max-age=2592000")
 		http.ServeFile(w, r, r.URL.Path[1:])
@@ -265,28 +265,27 @@ func main() {
 
 	fmt.Printf("heku-proxy listening on :%s\n", laddr)
 
-	err:=http.ListenAndServe(laddr, nil)
-	fmt.Println("exit with err:",err)
+	err := http.ListenAndServe(laddr, nil)
+	fmt.Println("exit with err:", err)
 }
 
-
-func loadTxtConf(confPath string)[]string{
-	lines:=make([]string,0)
-	datas,err:=ioutil.ReadFile(confPath)
-	if(err!=nil){
+func loadTxtConf(confPath string) []string {
+	lines := make([]string, 0)
+	datas, err := ioutil.ReadFile(confPath)
+	if err != nil {
 		log.Fatalln(err)
 	}
-	ls:=bytes.Split(datas,[]byte("\n"))
-	for _,lineBs:=range ls{
-		index:=bytes.IndexByte(lineBs,'#')
-		if(index>-1){
-			lineBs=lineBs[:index]
+	ls := bytes.Split(datas, []byte("\n"))
+	for _, lineBs := range ls {
+		index := bytes.IndexByte(lineBs, '#')
+		if index > -1 {
+			lineBs = lineBs[:index]
 		}
-		lineBs=bytes.TrimSpace(lineBs)
-		if(len(lineBs)==0){
-		 	continue
+		lineBs = bytes.TrimSpace(lineBs)
+		if len(lineBs) == 0 {
+			continue
 		}
-		lines=append(lines,string(lineBs))
+		lines = append(lines, string(lineBs))
 	}
 	return lines
 }
