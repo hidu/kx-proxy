@@ -13,10 +13,12 @@ $ echo "web:"$(basename `pwd`) >Procfile
 $ git push origin master
 ```
 
-proxy client:
-https://github.com/hidu/kx-proxy-client
 
-install:
+deploy to openshift:
 ```
-go get -u github.com/hidu/kx-proxy-client
-```
+$ git remote add openshift ssh://{you-app-id}@{you-app-name}.rhcloud.com/~/git/www.git/
+$ git push openshift master
+``` 
+
+kx-proxy-client:
+https://github.com/hidu/kx-proxy-client
