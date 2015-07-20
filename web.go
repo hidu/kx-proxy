@@ -144,6 +144,8 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 
 	if is_client {
 		copyHeader(req.Header, r.Header)
+		addrInfo := strings.Split(r.RemoteAddr, ":")
+		req.Header.Set("HTTP_X_FORWARDED_FOR", addrInfo[0])
 	} else {
 		req.Header.Set("Content-Type", r.Header.Get("Content-Type"))
 		req.Header.Set("User-Agent", r.Header.Get("User-Agent"))
@@ -236,6 +238,31 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 
 }
 
+/**
+* handle url http://aaa.com/get/http://www.baidu.com/
+ */
+func getHandler(w http.ResponseWriter, r *http.Request) {
+	cusUrl := r.URL.Path[5:]
+	req, err := http.NewRequest(r.Method, cusUrl, r.Body)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
+		return
+	}
+	addrInfo := strings.Split(r.RemoteAddr, ":")
+	req.Header.Set("HTTP_X_FORWARDED_FOR", addrInfo[0])
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		w.WriteHeader(http.StatusBadGateway)
+		w.Write([]byte(err.Error()))
+		return
+	}
+	defer resp.Body.Close()
+	copyHeader(w.Header(), resp.Header)
+	w.WriteHeader(resp.StatusCode)
+	io.Copy(w, resp.Body)
+}
+
 var addr = flag.String("addr", ":8085", "listen addr,eg :8085")
 
 func main() {
@@ -257,13 +284,14 @@ func main() {
 
 	http.HandleFunc("/", homeHandler)
 	http.HandleFunc("/p/", proxyHandler)
+	http.HandleFunc("/get/", getHandler)
 
 	http.HandleFunc("/assets/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "max-age=2592000")
 		http.ServeFile(w, r, r.URL.Path[1:])
 	})
 
-	fmt.Printf("heku-proxy listening on :%s\n", laddr)
+	fmt.Printf("kx-proxy listening on :%s\n", laddr)
 
 	err := http.ListenAndServe(laddr, nil)
 	fmt.Println("exit with err:", err)
