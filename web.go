@@ -46,6 +46,7 @@ var startTime = time.Now()
 var etag = fmt.Sprintf("%d", startTime.Unix())
 
 func homeHandler(w http.ResponseWriter, r *http.Request) {
+	fmt.Println(r.URL.String())
 	// 404 for all other url path
 	if r.URL.Path[1:] != "" {
 		http.NotFound(w, r)
@@ -239,10 +240,13 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 /**
-* handle url http://aaa.com/get/http://www.baidu.com/
+* handle url http://aaa.com/get/?url=http://www.baidu.com/
  */
 func getHandler(w http.ResponseWriter, r *http.Request) {
-	cusUrl := r.URL.Path[5:]
+	cusUrl :=""
+	if(strings.HasPrefix(r.URL.RawQuery,"url=")){
+		cusUrl=r.URL.RawQuery[4:]
+	}
 	req, err := http.NewRequest(r.Method, cusUrl, r.Body)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
