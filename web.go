@@ -144,9 +144,13 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	req, _ := http.NewRequest(r.Method, urlString, r.Body)
 
 	if is_client {
+		hidden:=r.Header.Get("hidden_ip")
 		copyHeader(req.Header, r.Header)
-		addrInfo := strings.Split(r.RemoteAddr, ":")
-		req.Header.Set("HTTP_X_FORWARDED_FOR", addrInfo[0])
+		if(hidden!="1"){
+			addrInfo := strings.Split(r.RemoteAddr, ":")
+			req.Header.Set("HTTP_X_FORWARDED_FOR", addrInfo[0])
+		}
+		req.Header.Del("hidden_ip")
 	} else {
 		req.Header.Set("Content-Type", r.Header.Get("Content-Type"))
 		req.Header.Set("User-Agent", r.Header.Get("User-Agent"))
