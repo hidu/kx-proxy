@@ -9,6 +9,8 @@ package main
 
 import (
 	"bytes"
+	"crypto/aes"
+	"crypto/cipher"
 	"encoding/base64"
 	"flag"
 	"fmt"
@@ -22,10 +24,20 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"crypto/rand"
 )
 
 var indexPage []byte
 var secreKeys = make(map[string]int)
+
+const (
+	aesTable = "kxproxyb8PsyCQ4b"
+)
+
+var (
+	aesBlock cipher.Block
+)
 
 func init() {
 	indexPage, _ = ioutil.ReadFile("index.html")
@@ -33,6 +45,14 @@ func init() {
 	for _, key := range keys {
 		secreKeys[key] = 1
 	}
+
+	var err error
+	aesBlock, err = aes.NewCipher([]byte(aesTable))
+
+	if err != nil {
+		panic(err)
+	}
+
 }
 
 var reBase = regexp.MustCompile("base +href=\"(.*?)\"")
@@ -60,7 +80,12 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 		if validUrl.Scheme == "" {
 			validUrl.Scheme = "http"
 		}
-		encodedUrl := base64.StdEncoding.EncodeToString([]byte(validUrl.String()))
+		//		encodedUrl := base64.StdEncoding.EncodeToString([]byte(validUrl.String()))
+		encodedUrl, err := encryptUrl(validUrl.String())
+		if err != nil {
+			w.Write([]byte("build url failed:" + err.Error()))
+			return
+		}
 		http.Redirect(w, r, "/p/"+encodedUrl, 302)
 		return
 	}
@@ -75,6 +100,69 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("etag", etag)
 	w.Write(indexPage)
+}
+
+func encryptUrl(srcUrl string) (string, error) {
+	src := []byte(srcUrl)
+	padLen := aes.BlockSize - (len(src) % aes.BlockSize)
+
+	for i := 0; i < padLen; i++ {
+
+		src = append(src, byte(padLen))
+
+	}
+
+	srcLen := len(src)
+
+	encryptText := make([]byte, srcLen+aes.BlockSize)
+
+	iv := encryptText[srcLen:]
+
+	if _, err := io.ReadFull(rand.Reader, iv); err != nil {
+		return "", err
+	}
+
+	mode := cipher.NewCBCEncrypter(aesBlock, iv)
+
+	mode.CryptBlocks(encryptText[:srcLen], src)
+	s := base64.StdEncoding.EncodeToString(encryptText)
+	return "u" + s, nil
+
+}
+
+func decryptUrl(srcUrl string) (string, error) {
+	if srcUrl == "" {
+		return "", fmt.Errorf("empty url")
+	}
+	src, err := base64.StdEncoding.DecodeString(srcUrl[1:])
+	if err != nil {
+		return "", err
+	}
+	if len(src) < aes.BlockSize*2 || len(src)%aes.BlockSize != 0 {
+		return "", fmt.Errorf("wrong data size")
+
+	}
+
+	srcLen := len(src) - aes.BlockSize
+
+	decryptText := make([]byte, srcLen)
+
+	iv := src[srcLen:]
+
+	mode := cipher.NewCBCDecrypter(aesBlock, iv)
+
+	mode.CryptBlocks(decryptText, src[:srcLen])
+
+	paddingLen := int(decryptText[srcLen-1])
+
+	if paddingLen > 16 {
+
+		return "", fmt.Errorf("wrong pading size")
+
+	}
+
+	return string(decryptText[:srcLen-paddingLen]), nil
+
 }
 
 func encodeURL(src []byte, baseHref string, urlString string, start int, end int) []byte {
@@ -99,9 +187,8 @@ func encodeURL(src []byte, baseHref string, urlString string, start int, end int
 		src = bytes.Replace(src, []byte(relURL), []byte(absURL), -1)
 		end = start + len(absURL)
 	}
-	var encodedPath []byte = make([]byte, base64.StdEncoding.EncodedLen(end-start))
-	base64.StdEncoding.Encode(encodedPath, src[start:end])
-	return bytes.Replace(src, src[start:end], encodedPath, -1)
+	newUrl, _ := encryptUrl(string(src[start:end]))
+	return bytes.Replace(src, src[start:end], []byte(newUrl), -1)
 }
 
 var copyHeaders = []string{"Referer", "Accept-Language", "Cookie"}
@@ -119,11 +206,13 @@ var KxKey = "KxKey"
 func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	r.Header.Del("Connection")
 	encodedUrl := r.URL.Path[len("/p/"):]
-	url, err := base64.StdEncoding.DecodeString(encodedUrl)
+	url, err := decryptUrl(encodedUrl)
 	if err != nil {
+		log.Println("decode_url_failed:", err)
 		http.NotFound(w, r)
 		return
 	}
+	log.Println("visit_url:", url)
 
 	is_client := r.Header.Get("is_client") == "1"
 	if is_client {
@@ -144,9 +233,9 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	req, _ := http.NewRequest(r.Method, urlString, r.Body)
 
 	if is_client {
-		hidden:=r.Header.Get("hidden_ip")
+		hidden := r.Header.Get("hidden_ip")
 		copyHeader(req.Header, r.Header)
-		if(hidden!="1"){
+		if hidden != "1" {
 			addrInfo := strings.Split(r.RemoteAddr, ":")
 			req.Header.Set("HTTP_X_FORWARDED_FOR", addrInfo[0])
 		}
@@ -247,9 +336,9 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 * handle url http://aaa.com/get/?url=http://www.baidu.com/
  */
 func getHandler(w http.ResponseWriter, r *http.Request) {
-	cusUrl :=""
-	if(strings.HasPrefix(r.URL.RawQuery,"url=")){
-		cusUrl=r.URL.RawQuery[4:]
+	cusUrl := ""
+	if strings.HasPrefix(r.URL.RawQuery, "url=") {
+		cusUrl = r.URL.RawQuery[4:]
 	}
 	req, err := http.NewRequest(r.Method, cusUrl, r.Body)
 	if err != nil {
