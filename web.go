@@ -107,7 +107,6 @@ func encryptUrl(srcUrl string) (string, error) {
 	padLen := aes.BlockSize - (len(src) % aes.BlockSize)
 
 	for i := 0; i < padLen; i++ {
-
 		src = append(src, byte(padLen))
 
 	}
@@ -125,8 +124,8 @@ func encryptUrl(srcUrl string) (string, error) {
 	mode := cipher.NewCBCEncrypter(aesBlock, iv)
 
 	mode.CryptBlocks(encryptText[:srcLen], src)
-	s := base64.StdEncoding.EncodeToString(encryptText)
-	return "u" + s, nil
+	s := base64.URLEncoding.EncodeToString(encryptText)
+	return s, nil
 
 }
 
@@ -134,8 +133,9 @@ func decryptUrl(srcUrl string) (string, error) {
 	if srcUrl == "" {
 		return "", fmt.Errorf("empty url")
 	}
-	src, err := base64.StdEncoding.DecodeString(srcUrl[1:])
+	src, err := base64.URLEncoding.DecodeString(srcUrl)
 	if err != nil {
+		log.Println("base64_decode_failed:", err.Error(), "data:", srcUrl[1:])
 		return "", err
 	}
 	if len(src) < aes.BlockSize*2 || len(src)%aes.BlockSize != 0 {
@@ -208,8 +208,8 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	encodedUrl := r.URL.Path[len("/p/"):]
 	url, err := decryptUrl(encodedUrl)
 	if err != nil {
-		log.Println("decode_url_failed:", err)
-		http.NotFound(w, r)
+		log.Println("decode_url_failed:", err, encodedUrl)
+		http.Error(w, "decode_url_failed:"+err.Error(), http.StatusInternalServerError)
 		return
 	}
 	log.Println("visit_url:", url)
@@ -222,7 +222,7 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 			_, hasSkey := secreKeys[skey]
 			if skey == "" || !hasSkey {
 				w.WriteHeader(http.StatusForbidden)
-				w.Write([]byte(r.Host + " required " + KxKey))
+				w.Write([]byte(r.Host + " required " + KxKey + "\nyourkey:" + skey))
 				return
 			}
 		}
@@ -257,7 +257,7 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		fmt.Println("Error Fetching " + urlString)
-		http.NotFound(w, r)
+		http.Error(w, "Error Fetching "+urlString+"\n"+err.Error(), http.StatusBadGateway)
 		return
 	}
 	defer resp.Body.Close()
@@ -274,62 +274,89 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 			w.Header().Add(headerKey, v)
 		}
 	}
-	w.WriteHeader(resp.StatusCode)
+	if resp.StatusCode == http.StatusMovedPermanently || resp.StatusCode == http.StatusFound {
+		location := resp.Header.Get("Location")
+		if location != "" {
+			encodedUrl, err := encryptUrl(location)
+			if err != nil {
+				w.Write([]byte("build url failed:" + err.Error()))
+				return
+			}
+			http.Redirect(w, r, "/p/"+encodedUrl, 302)
+			return
+		}
+	}
 	if is_client {
+		w.WriteHeader(resp.StatusCode)
 		io.Copy(w, resp.Body)
 		return
 	}
 
 	// Rewrite all urls
-	baseHref := ""
 	if strings.Contains(contentType, "text/html") {
 		body, _ := ioutil.ReadAll(resp.Body)
-		baseHrefMatch := reBase.FindSubmatch(body)
-		if len(baseHrefMatch) > 0 {
-			baseHref = string(baseHrefMatch[1][:])
-		}
-		encodedBody := reHTML.ReplaceAllFunc(body, func(s []byte) []byte {
-			parts := reHTML.FindSubmatchIndex(s)
-			if parts != nil {
-				// replace src attribute
-				srcIndex := parts[2:4]
-				if srcIndex[0] != -1 {
-					return encodeURL(s, baseHref, urlString, srcIndex[0], srcIndex[1])
-				}
-
-				// replace href attribute
-				hrefIndex := parts[4:6]
-				if hrefIndex[0] != -1 {
-					return encodeURL(s, baseHref, urlString, hrefIndex[0], hrefIndex[1])
-				}
-
-				// replace form action attribute
-				actionIndex := parts[6:8]
-				if actionIndex[0] != -1 {
-					return encodeURL(s, baseHref, urlString, actionIndex[0], actionIndex[1])
-				}
-			}
-			return s
-		})
+		encodedBody := htmlUrlReplace(body, urlString)
+		encodedBody = cssUrlReplace(encodedBody, urlString)
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(encodedBody)))
+		w.WriteHeader(resp.StatusCode)
 		w.Write(encodedBody)
 	} else if strings.Contains(contentType, "text/css") {
 		body, _ := ioutil.ReadAll(resp.Body)
-		encodedBody := reCSS.ReplaceAllFunc(body, func(s []byte) []byte {
-			parts := reCSS.FindSubmatchIndex(s)
-			if parts != nil {
-				// replace url attribute in css
-				pathIndex := parts[2:4]
-				if pathIndex[0] != -1 {
-					return encodeURL(s, baseHref, urlString, pathIndex[0], pathIndex[1])
-				}
-			}
-			return s
-		})
+		encodedBody := cssUrlReplace(body, urlString)
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(encodedBody)))
+		w.WriteHeader(resp.StatusCode)
 		w.Write(encodedBody)
 	} else {
+		w.WriteHeader(resp.StatusCode)
 		io.Copy(w, resp.Body)
 	}
 
+}
+
+func htmlUrlReplace(body []byte, urlString string) []byte {
+	baseHrefMatch := reBase.FindSubmatch(body)
+	baseHref := ""
+	if len(baseHrefMatch) > 0 {
+		baseHref = string(baseHrefMatch[1][:])
+	}
+	return reHTML.ReplaceAllFunc(body, func(s []byte) []byte {
+		parts := reHTML.FindSubmatchIndex(s)
+		if parts != nil {
+			// replace src attribute
+			srcIndex := parts[2:4]
+			if srcIndex[0] != -1 {
+				return encodeURL(s, baseHref, urlString, srcIndex[0], srcIndex[1])
+			}
+
+			// replace href attribute
+			hrefIndex := parts[4:6]
+			if hrefIndex[0] != -1 {
+				return encodeURL(s, baseHref, urlString, hrefIndex[0], hrefIndex[1])
+			}
+
+			// replace form action attribute
+			actionIndex := parts[6:8]
+			if actionIndex[0] != -1 {
+				return encodeURL(s, baseHref, urlString, actionIndex[0], actionIndex[1])
+			}
+		}
+		return s
+	})
+}
+
+func cssUrlReplace(body []byte, urlString string) []byte {
+	baseHref := ""
+	return reCSS.ReplaceAllFunc(body, func(s []byte) []byte {
+		parts := reCSS.FindSubmatchIndex(s)
+		if parts != nil {
+			// replace url attribute in css
+			pathIndex := parts[2:4]
+			if pathIndex[0] != -1 {
+				return encodeURL(s, baseHref, urlString, pathIndex[0], pathIndex[1])
+			}
+		}
+		return s
+	})
 }
 
 /**
@@ -364,6 +391,12 @@ var addr = flag.String("addr", ":8085", "listen addr,eg :8085")
 
 func main() {
 	flag.Parse()
+
+	//	for i:=0;i<100;i++{
+	//	e,_:=encryptUrl("http://127.0.0.1/h/c.html")
+	//	d,_:=decryptUrl(e)
+	//	fmt.Println("url:",e,"decode:",d)
+	//	}
 
 	var httpHost string = os.Getenv("HOST")
 	var httpPort string = os.Getenv("PORT")
