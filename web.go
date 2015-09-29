@@ -26,6 +26,8 @@ import (
 	"time"
 
 	"crypto/rand"
+
+	"crypto/md5"
 )
 
 var indexPage []byte
@@ -59,11 +61,13 @@ var reBase = regexp.MustCompile("base +href=\"(.*?)\"")
 var reHTML = regexp.MustCompile("src=[\"\\'](.*?)[\"\\']|href=[\"\\'](.*?)[\"\\']|action=[\"\\'](.*?)[\"\\']")
 var reCSS = regexp.MustCompile("url\\([\"\\']?(.*?)[\"\\']?\\)")
 
-var httpClient *http.Client = &http.Client{}
+var httpClient = &http.Client{}
 
 var startTime = time.Now()
 
 var etag = fmt.Sprintf("%d", startTime.Unix())
+
+var bodyStreamEnc = flag.Bool("enc", false, "encrypts the body stream")
 
 func homeHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Println(r.URL.String())
@@ -73,20 +77,20 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	r.ParseForm()
-	enteredUrl := r.FormValue("url")
-	if enteredUrl != "" {
-		validUrl, _ := url.Parse(enteredUrl)
+	enteredURL := r.FormValue("url")
+	if enteredURL != "" {
+		validURL, _ := url.Parse(enteredURL)
 		// prepend http if not specified
-		if validUrl.Scheme == "" {
-			validUrl.Scheme = "http"
+		if validURL.Scheme == "" {
+			validURL.Scheme = "http"
 		}
-		//		encodedUrl := base64.StdEncoding.EncodeToString([]byte(validUrl.String()))
-		encodedUrl, err := encryptUrl(validUrl.String())
+		//		encodedURL := base64.StdEncoding.EncodeToString([]byte(validURL.String()))
+		encodedURL, err := encryptURL(validURL.String())
 		if err != nil {
 			w.Write([]byte("build url failed:" + err.Error()))
 			return
 		}
-		http.Redirect(w, r, "/p/"+encodedUrl, 302)
+		http.Redirect(w, r, "/p/"+encodedURL, 302)
 		return
 	}
 	w.Header().Set("Cache-Control", "max-age=2592000")
@@ -102,8 +106,8 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(indexPage)
 }
 
-func encryptUrl(srcUrl string) (string, error) {
-	src := []byte(srcUrl)
+func encryptURL(srcURL string) (string, error) {
+	src := []byte(srcURL)
 	padLen := aes.BlockSize - (len(src) % aes.BlockSize)
 
 	for i := 0; i < padLen; i++ {
@@ -129,13 +133,13 @@ func encryptUrl(srcUrl string) (string, error) {
 
 }
 
-func decryptUrl(srcUrl string) (string, error) {
-	if srcUrl == "" {
+func decryptURL(srcURL string) (string, error) {
+	if srcURL == "" {
 		return "", fmt.Errorf("empty url")
 	}
-	src, err := base64.URLEncoding.DecodeString(srcUrl)
+	src, err := base64.URLEncoding.DecodeString(srcURL)
 	if err != nil {
-		log.Println("base64_decode_failed:", err.Error(), "data:", srcUrl[1:])
+		log.Println("base64_decode_failed:", err.Error(), "data:", srcURL[1:])
 		return "", err
 	}
 	if len(src) < aes.BlockSize*2 || len(src)%aes.BlockSize != 0 {
@@ -187,8 +191,8 @@ func encodeURL(src []byte, baseHref string, urlString string, start int, end int
 		src = bytes.Replace(src, []byte(relURL), []byte(absURL), -1)
 		end = start + len(absURL)
 	}
-	newUrl, _ := encryptUrl(string(src[start:end]))
-	return bytes.Replace(src, src[start:end], []byte(newUrl), -1)
+	newURL, _ := encryptURL(string(src[start:end]))
+	return bytes.Replace(src, src[start:end], []byte(newURL), -1)
 }
 
 var copyHeaders = []string{"Referer", "Accept-Language", "Cookie"}
@@ -201,38 +205,47 @@ func copyHeader(dst, src http.Header) {
 	}
 }
 
-var KxKey = "KxKey"
+var kxKey = "KxKey"
 
 func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	r.Header.Del("Connection")
-	encodedUrl := r.URL.Path[len("/p/"):]
-	url, err := decryptUrl(encodedUrl)
+	encodedURL := r.URL.Path[len("/p/"):]
+
+	kxURL := r.Header.Get("kx_url")
+	if kxURL != "" {
+		encodedURL = kxURL
+	}
+	r.Header.Del("kx_url")
+
+	url, err := decryptURL(encodedURL)
 	if err != nil {
-		log.Println("decode_url_failed:", err, encodedUrl)
+		log.Println("decode_url_failed:", err, encodedURL)
 		http.Error(w, "decode_url_failed:"+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	log.Println("visit_url:", url)
 
-	is_client := r.Header.Get("is_client") == "1"
-	if is_client {
+	isClient := r.Header.Get("is_client") == "1"
+
+	log.Println("visit_url:", url, "is_client:", isClient)
+
+	skey := r.Header.Get(kxKey)
+	if isClient {
 		r.Header.Del("is_client")
 		if len(secreKeys) > 0 {
-			skey := r.Header.Get(KxKey)
 			_, hasSkey := secreKeys[skey]
 			if skey == "" || !hasSkey {
 				w.WriteHeader(http.StatusForbidden)
-				w.Write([]byte(r.Host + " required " + KxKey + "\nyourkey:" + skey))
+				w.Write([]byte(r.Host + " required " + kxKey + "\nyourkey:" + skey))
 				return
 			}
 		}
-		r.Header.Del(KxKey)
+		r.Header.Del(kxKey)
 	}
 
 	urlString := string(url[:])
 	req, _ := http.NewRequest(r.Method, urlString, r.Body)
 
-	if is_client {
+	if isClient {
 		hidden := r.Header.Get("hidden_ip")
 		copyHeader(req.Header, r.Header)
 		if hidden != "1" {
@@ -274,35 +287,48 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 			w.Header().Add(headerKey, v)
 		}
 	}
+
+	if isClient {
+		if *bodyStreamEnc {
+			w.Header().Set("_kx_enc_", "1")
+			w.Header().Set("_kx_content_encoding", w.Header().Get("Content-Encoding"))
+			w.Header().Del("Content-Encoding")
+			w.WriteHeader(resp.StatusCode)
+
+			writer := cipherStreamWrite(skey, encodedURL, w)
+			n, err := io.Copy(writer, resp.Body)
+			fmt.Println(n, err)
+		} else {
+			w.WriteHeader(resp.StatusCode)
+			io.Copy(w, resp.Body)
+		}
+		return
+	}
+
 	if resp.StatusCode == http.StatusMovedPermanently || resp.StatusCode == http.StatusFound {
 		location := resp.Header.Get("Location")
 		if location != "" {
-			encodedUrl, err := encryptUrl(location)
+			encodedURL, err := encryptURL(location)
 			if err != nil {
 				w.Write([]byte("build url failed:" + err.Error()))
 				return
 			}
-			http.Redirect(w, r, "/p/"+encodedUrl, 302)
+			http.Redirect(w, r, "/p/"+encodedURL, 302)
 			return
 		}
-	}
-	if is_client {
-		w.WriteHeader(resp.StatusCode)
-		io.Copy(w, resp.Body)
-		return
 	}
 
 	// Rewrite all urls
 	if strings.Contains(contentType, "text/html") {
 		body, _ := ioutil.ReadAll(resp.Body)
-		encodedBody := htmlUrlReplace(body, urlString)
-		encodedBody = cssUrlReplace(encodedBody, urlString)
+		encodedBody := htmlURLReplace(body, urlString)
+		encodedBody = cssURLReplace(encodedBody, urlString)
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(encodedBody)))
 		w.WriteHeader(resp.StatusCode)
 		w.Write(encodedBody)
 	} else if strings.Contains(contentType, "text/css") {
 		body, _ := ioutil.ReadAll(resp.Body)
-		encodedBody := cssUrlReplace(body, urlString)
+		encodedBody := cssURLReplace(body, urlString)
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(encodedBody)))
 		w.WriteHeader(resp.StatusCode)
 		w.Write(encodedBody)
@@ -313,7 +339,25 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func htmlUrlReplace(body []byte, urlString string) []byte {
+//对数据流进行加密
+func cipherStreamWrite(skey string, encodeURL string, writer io.Writer) *cipher.StreamWriter {
+	key := strMd5(fmt.Sprintf("%s#kxsw#%s", skey, encodeURL))
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		panic(err)
+	}
+	var iv [aes.BlockSize]byte
+	stream := cipher.NewOFB(block, iv[:])
+	return &cipher.StreamWriter{S: stream, W: writer}
+}
+
+func strMd5(mystr string) []byte {
+	h := md5.New()
+	h.Write([]byte(mystr))
+	return h.Sum(nil)
+}
+
+func htmlURLReplace(body []byte, urlString string) []byte {
 	baseHrefMatch := reBase.FindSubmatch(body)
 	baseHref := ""
 	if len(baseHrefMatch) > 0 {
@@ -344,7 +388,7 @@ func htmlUrlReplace(body []byte, urlString string) []byte {
 	})
 }
 
-func cssUrlReplace(body []byte, urlString string) []byte {
+func cssURLReplace(body []byte, urlString string) []byte {
 	baseHref := ""
 	return reCSS.ReplaceAllFunc(body, func(s []byte) []byte {
 		parts := reCSS.FindSubmatchIndex(s)
@@ -363,11 +407,11 @@ func cssUrlReplace(body []byte, urlString string) []byte {
 * handle url http://aaa.com/get/?url=http://www.baidu.com/
  */
 func getHandler(w http.ResponseWriter, r *http.Request) {
-	cusUrl := ""
+	cusURL := ""
 	if strings.HasPrefix(r.URL.RawQuery, "url=") {
-		cusUrl = r.URL.RawQuery[4:]
+		cusURL = r.URL.RawQuery[4:]
 	}
-	req, err := http.NewRequest(r.Method, cusUrl, r.Body)
+	req, err := http.NewRequest(r.Method, cusURL, r.Body)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(err.Error()))
@@ -393,19 +437,20 @@ func main() {
 	flag.Parse()
 
 	//	for i:=0;i<100;i++{
-	//	e,_:=encryptUrl("http://127.0.0.1/h/c.html")
-	//	d,_:=decryptUrl(e)
+	//	e,_:=encryptURL("http://127.0.0.1/h/c.html")
+	//	d,_:=decryptURL(e)
 	//	fmt.Println("url:",e,"decode:",d)
 	//	}
 
-	var httpHost string = os.Getenv("HOST")
-	var httpPort string = os.Getenv("PORT")
+	var httpHost  = os.Getenv("HOST")
+	var httpPort  = os.Getenv("PORT")
 
 	laddr := httpHost + ":" + httpPort
 
 	if httpPort == "" {
 		laddr = *addr
 	}
+	log.Println("bodyStreamEnc:", *bodyStreamEnc)
 
 	if len(laddr) < 2 {
 		fmt.Println("listening addr [", laddr, "] is wrong")
@@ -428,7 +473,7 @@ func main() {
 }
 
 func loadTxtConf(confPath string) []string {
-	lines := make([]string, 0)
+	var lines []string
 	datas, err := ioutil.ReadFile(confPath)
 	if err != nil {
 		log.Fatalln(err)
