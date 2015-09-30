@@ -8,31 +8,31 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"strings"
-	"time"
 	"regexp"
 	"strconv"
+	"strings"
+	"time"
 )
 
 var kxKey = "KxKey"
 
-var reEncodedURL=regexp.MustCompile(`^(\d+)\|(.+)$`)
+var reEncodedURL = regexp.MustCompile(`^(\d+)\|(.+)$`)
 
 func proxyHandler(w http.ResponseWriter, r *http.Request) {
-	logData:=make(map[string]interface{})
-	startTime:=time.Now()
-	defer (func(){
-		used:=time.Now().Sub(startTime)
+	logData := make(map[string]interface{})
+	startTime := time.Now()
+	defer (func() {
+		used := time.Now().Sub(startTime)
 		log.Println(
-			"remote:",r.RemoteAddr,
-			"path:",r.URL.Path,
-			"used:",used,
+			"remote:", r.RemoteAddr,
+			"path:", r.URL.Path,
+			"used:", used,
 			logData)
 	})()
 
 	r.Header.Del("Connection")
 	encodedURL := r.URL.Path[len("/p/"):]
-	
+
 	kxURL := r.Header.Get("kx_url")
 	if kxURL != "" {
 		encodedURL = kxURL
@@ -41,38 +41,38 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 
 	url, err := util.DecryptURL(encodedURL)
 	if err != nil {
-		logData["emsg"]="decode_url_failed:"+err.Error()
+		logData["emsg"] = "decode_url_failed:" + err.Error()
 		http.Error(w, "decode_url_failed:"+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	
-	matchStrs:=reEncodedURL.FindStringSubmatch(url)
+
+	matchStrs := reEncodedURL.FindStringSubmatch(url)
 	//检查url是否过期
-	if(len(matchStrs)==3){
-		url=matchStrs[2]
-		expireAt,_:=strconv.ParseInt(matchStrs[1],10,64)
-		expiredN:=startTime.Unix()-(expireAt+2)
-		logData["expiredN"]=expiredN
-		if(expireAt>0 && expiredN>0){
-			http.Error(w, fmt.Sprintf("expired:%d",expiredN), http.StatusBadRequest)
+	if len(matchStrs) == 3 {
+		url = matchStrs[2]
+		expireAt, _ := strconv.ParseInt(matchStrs[1], 10, 64)
+		expiredN := startTime.Unix() - (expireAt + 2)
+		logData["expiredN"] = expiredN
+		if expireAt > 0 && expiredN > 0 {
+			http.Error(w, fmt.Sprintf("expired:%d", expiredN), http.StatusBadRequest)
 			return
 		}
 	}
-	
+
 	isClient := r.Header.Get("is_client") == "1"
-	
-	logData["visit_url"]=url
-	logData["is_client"]=isClient
+
+	logData["visit_url"] = url
+	logData["is_client"] = isClient
 
 	skey := r.Header.Get(kxKey)
 	if isClient {
-		logData["skey"]=skey
-		
+		logData["skey"] = skey
+
 		r.Header.Del("is_client")
 		if len(secreKeys) > 0 {
 			_, hasSkey := secreKeys[skey]
 			if skey == "" || !hasSkey {
-				logData["emsg"]="required kxkey,get:"+skey
+				logData["emsg"] = "required kxkey,get:" + skey
 				w.WriteHeader(http.StatusForbidden)
 				w.Write([]byte(r.Host + " required " + kxKey + "\nyourkey:" + skey))
 				return
@@ -86,9 +86,9 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 
 	if isClient {
 		hidden := r.Header.Get("hidden_ip")
-		
-		logData["hidden_ip"]=hidden
-		
+
+		logData["hidden_ip"] = hidden
+
 		copyHeader(req.Header, r.Header)
 		if hidden != "1" {
 			addrInfo := strings.Split(r.RemoteAddr, ":")
@@ -111,7 +111,7 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	resp, err := transport.RoundTrip(req)
 
 	if err != nil {
-		logData["emsg"]="fetch_failed:"+err.Error()
+		logData["emsg"] = "fetch_failed:" + err.Error()
 		http.Error(w, "Error Fetching "+urlString+"\n"+err.Error(), http.StatusBadGateway)
 		return
 	}
@@ -130,26 +130,27 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	logData["resp_status"]=resp.StatusCode
-	
+	logData["resp_status"] = resp.StatusCode
+
 	if isClient {
 		var copySize int64
 		var copyErr error
+
+		util.HeaderEnc(w.Header())
+
 		if BodyStreamEnc {
 			w.Header().Set("_kx_enc_", "1")
-			w.Header().Set("_kx_content_encoding", w.Header().Get("Content-Encoding"))
-			w.Header().Del("Content-Encoding")
 			w.WriteHeader(resp.StatusCode)
 
 			writer := util.CipherStreamWrite(skey, encodedURL, w)
 			copySize, copyErr = io.Copy(writer, resp.Body)
-			
+
 		} else {
 			w.WriteHeader(resp.StatusCode)
-			copySize, copyErr=io.Copy(w, resp.Body)
+			copySize, copyErr = io.Copy(w, resp.Body)
 		}
-		logData["io_copy_size"]=copySize
-		logData["io_copy_err"]=copyErr
+		logData["io_copy_size"] = copySize
+		logData["io_copy_err"] = copyErr
 		return
 	}
 
@@ -158,7 +159,7 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 		if location != "" {
 			encodedURL, err := util.EncryptURL(location)
 			if err != nil {
-				logData["emsg"]="Location_build_url failed"+err.Error()
+				logData["emsg"] = "Location_build_url failed" + err.Error()
 				w.Write([]byte("build url failed:" + err.Error()))
 				return
 			}
@@ -183,9 +184,9 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 		w.Write(encodedBody)
 	} else {
 		w.WriteHeader(resp.StatusCode)
-		copySize, copyErr:=io.Copy(w, resp.Body)
-		logData["io_copy_size"]=copySize
-		logData["io_copy_err"]=copyErr
+		copySize, copyErr := io.Copy(w, resp.Body)
+		logData["io_copy_size"] = copySize
+		logData["io_copy_err"] = copyErr
 	}
 
 }

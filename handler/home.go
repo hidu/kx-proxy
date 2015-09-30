@@ -30,5 +30,5 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/p/"+encodedURL, 302)
 		return
 	}
-	Assest.FileHandlerFunc("/assets/html/index.html")(w,r)
+	Assest.FileHandlerFunc("/assets/html/index.html")(w, r)
 }
