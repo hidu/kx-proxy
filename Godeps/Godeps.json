@@ -1,5 +1,5 @@
 {
-	"ImportPath": "git.heroku.com/vast-scrubland-8450",
+	"ImportPath": "github.com/hidu/kx-proxy",
 	"GoVersion": "go1.5.1",
 	"Deps": []
 }
