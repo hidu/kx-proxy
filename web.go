@@ -24,10 +24,9 @@ import (
 	"regexp"
 	"strings"
 	"time"
-
 	"crypto/rand"
-
 	"crypto/md5"
+	"github.com/hidu/kx-proxy/assets"
 )
 
 var indexPage []byte
@@ -42,7 +41,7 @@ var (
 )
 
 func init() {
-	indexPage, _ = ioutil.ReadFile("index.html")
+	indexPage= []byte(assets.Assest.GetContent("/assets/html/index.html"))
 	keys := loadTxtConf("keys.txt")
 	for _, key := range keys {
 		secreKeys[key] = 1
@@ -431,16 +430,15 @@ func getHandler(w http.ResponseWriter, r *http.Request) {
 	io.Copy(w, resp.Body)
 }
 
+func helloHandler(w http.ResponseWriter, r *http.Request) {
+	t,_:=encryptURL(fmt.Sprintf("%d",time.Now().Unix()))
+	w.Write([]byte(t))
+}
+
 var addr = flag.String("addr", ":8085", "listen addr,eg :8085")
 
 func main() {
 	flag.Parse()
-
-	//	for i:=0;i<100;i++{
-	//	e,_:=encryptURL("http://127.0.0.1/h/c.html")
-	//	d,_:=decryptURL(e)
-	//	fmt.Println("url:",e,"decode:",d)
-	//	}
 
 	var httpHost  = os.Getenv("HOST")
 	var httpPort  = os.Getenv("PORT")
@@ -460,11 +458,14 @@ func main() {
 	http.HandleFunc("/", homeHandler)
 	http.HandleFunc("/p/", proxyHandler)
 	http.HandleFunc("/get/", getHandler)
-
-	http.HandleFunc("/assets/", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cache-Control", "max-age=2592000")
-		http.ServeFile(w, r, r.URL.Path[1:])
-	})
+	http.HandleFunc("/hello", helloHandler)
+	
+	http.Handle("/assets/",assets.Assest.HTTPHandler("/"))
+	
+//	http.HandleFunc("/assets/", func(w http.ResponseWriter, r *http.Request) {
+//		w.Header().Set("Cache-Control", "max-age=2592000")
+//		http.ServeFile(w, r, r.URL.Path[1:])
+//	})
 
 	fmt.Printf("kx-proxy listening on :%s\n", laddr)
 

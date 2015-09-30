@@ -1,0 +1,5 @@
+{
+  "src":"assets",
+  "dest":"assets/assest.go",
+  "package":"assets"
+}
