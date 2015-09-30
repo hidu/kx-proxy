@@ -1,8 +1,5 @@
 {
 	"ImportPath": "github.com/hidu/kx-proxy",
 	"GoVersion": "go1.5.1",
-	"Packages": [
-        "./..."
-    ],
 	"Deps": []
 }
