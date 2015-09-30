@@ -66,6 +66,7 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 
 	skey := r.Header.Get(kxKey)
 	if isClient {
+		util.HeaderDec(r.Header)
 		logData["skey"] = skey
 
 		r.Header.Del("is_client")
