@@ -1,5 +1,5 @@
 {
   "src":"assets",
-  "dest":"assets/assest.go",
-  "package":"assets"
+  "dest":"handler/assest.go",
+  "package":"handler"
 }
