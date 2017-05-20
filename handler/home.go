@@ -26,7 +26,7 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		expire, _ := strconv.ParseInt(r.FormValue("expire"), 10, 64)
 
-		pu := util.NewProxyUrl(validURL.String(), expire)
+		pu := util.NewProxyUrl(validURL.String(), expire,r)
 		encodedURL, err := pu.Encode()
 		if err != nil {
 			w.Write([]byte("build url failed:" + err.Error()))
@@ -35,7 +35,7 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/p/"+encodedURL, 302)
 		return
 	}
-	Assest.FileHandlerFunc("/assets/html/index.html")(w, r)
+	Assest.FileHandlerFunc("/assest/html/index.html")(w, r)
 }
 
 //404

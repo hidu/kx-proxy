@@ -313,8 +313,8 @@ h1 {
     width:95px;
 }
 .main .input-group .select_expire select{
+	padding:0 0;
 	border-left: none;
-	padding:0 0
 }
 
 

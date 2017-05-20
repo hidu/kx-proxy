@@ -48,6 +48,11 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "expired", http.StatusBadRequest)
 		return
 	}
+	
+	if !pu.CheckSign(r){
+		http.Error(w, "sign not match", http.StatusBadRequest)
+		return
+	}
 
 	isClient := r.Header.Get("is_client") == "1"
 
@@ -162,8 +167,8 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	if strings.Contains(contentType, "text/html") {
 		body, _ := ioutil.ReadAll(resp.Body)
 
-		encodedBody := util.HTMLURLReplace(body, urlString, pu.GetExpire())
-		encodedBody = util.CSSURLReplace(encodedBody, urlString, pu.GetExpire())
+		encodedBody := util.HTMLURLReplace(body, urlString, pu.GetExpire(),r)
+		encodedBody = util.CSSURLReplace(encodedBody, urlString, pu.GetExpire(),r)
 
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(encodedBody)))
 		w.WriteHeader(resp.StatusCode)
@@ -171,7 +176,7 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	} else if strings.Contains(contentType, "text/css") {
 		body, _ := ioutil.ReadAll(resp.Body)
 
-		encodedBody := util.CSSURLReplace(body, urlString, pu.GetExpire())
+		encodedBody := util.CSSURLReplace(body, urlString, pu.GetExpire(),r)
 
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(encodedBody)))
 		w.WriteHeader(resp.StatusCode)

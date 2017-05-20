@@ -12,7 +12,8 @@ func init() {
 	http.HandleFunc("/p/", proxyHandler)
 	http.HandleFunc("/get/", getHandler)
 	http.HandleFunc("/hello", helloHandler)
-	http.Handle("/assets/", Assest.HTTPHandler("/"))
+	http.HandleFunc("/favicon.ico", Assest.FileHandlerFunc("/assest/favicon.png"))
+	http.Handle("/assest/", Assest.HTTPHandler("/"))
 }
 
 func helloHandler(w http.ResponseWriter, r *http.Request) {
