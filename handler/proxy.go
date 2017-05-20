@@ -8,15 +8,11 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"regexp"
-	"strconv"
 	"strings"
 	"time"
 )
 
 var kxKey = "KxKey"
-
-var reEncodedURL = regexp.MustCompile(`^(\d+)\|(.+)$`)
 
 func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	logData := make(map[string]interface{})
@@ -39,29 +35,23 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	r.Header.Del("kx_url")
 
-	url, err := util.DecryptURL(encodedURL)
+	pu, err := util.DecodeProxyUrl(encodedURL)
 	if err != nil {
 		logData["emsg"] = "decode_url_failed:" + err.Error()
 		http.Error(w, "decode_url_failed:"+err.Error(), http.StatusInternalServerError)
 		return
 	}
+	urlString := pu.GetUrlStr()
 
-	matchStrs := reEncodedURL.FindStringSubmatch(url)
 	//检查url是否过期
-	if len(matchStrs) == 3 {
-		url = matchStrs[2]
-		expireAt, _ := strconv.ParseInt(matchStrs[1], 10, 64)
-		expiredN := startTime.Unix() - (expireAt + 2)
-		logData["expiredN"] = expiredN
-		if expireAt > 0 && expiredN > 0 {
-			http.Error(w, fmt.Sprintf("expired:%d", expiredN), http.StatusBadRequest)
-			return
-		}
+	if pu.IsExpire() {
+		http.Error(w, "expired", http.StatusBadRequest)
+		return
 	}
 
 	isClient := r.Header.Get("is_client") == "1"
 
-	logData["visit_url"] = url
+	logData["visit_url"] = urlString
 	logData["is_client"] = isClient
 
 	skey := r.Header.Get(kxKey)
@@ -82,9 +72,7 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 		r.Header.Del(kxKey)
 	}
 
-	urlString := string(url[:])
 	req, _ := http.NewRequest(r.Method, urlString, r.Body)
-
 	if isClient {
 		hidden := r.Header.Get("hidden_ip")
 
@@ -158,7 +146,8 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	if resp.StatusCode == http.StatusMovedPermanently || resp.StatusCode == http.StatusFound {
 		location := resp.Header.Get("Location")
 		if location != "" {
-			encodedURL, err := util.EncryptURL(location)
+			pu.SwitchUrl(location)
+			encodedURL, err := pu.Encode()
 			if err != nil {
 				logData["emsg"] = "Location_build_url failed" + err.Error()
 				w.Write([]byte("build url failed:" + err.Error()))
@@ -172,14 +161,18 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	// Rewrite all urls
 	if strings.Contains(contentType, "text/html") {
 		body, _ := ioutil.ReadAll(resp.Body)
-		encodedBody := util.HTMLURLReplace(body, urlString)
-		encodedBody = util.CSSURLReplace(encodedBody, urlString)
+
+		encodedBody := util.HTMLURLReplace(body, urlString, pu.GetExpire())
+		encodedBody = util.CSSURLReplace(encodedBody, urlString, pu.GetExpire())
+
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(encodedBody)))
 		w.WriteHeader(resp.StatusCode)
 		w.Write(encodedBody)
 	} else if strings.Contains(contentType, "text/css") {
 		body, _ := ioutil.ReadAll(resp.Body)
-		encodedBody := util.CSSURLReplace(body, urlString)
+
+		encodedBody := util.CSSURLReplace(body, urlString, pu.GetExpire())
+
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(encodedBody)))
 		w.WriteHeader(resp.StatusCode)
 		w.Write(encodedBody)

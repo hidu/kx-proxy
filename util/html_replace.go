@@ -11,12 +11,17 @@ var reBase = regexp.MustCompile("base +href=\"(.*?)\"")
 var reHTML = regexp.MustCompile("src=[\"\\'](.*?)[\"\\']|href=[\"\\'](.*?)[\"\\']|action=[\"\\'](.*?)[\"\\']")
 var reCSS = regexp.MustCompile("url\\([\"\\']?(.*?)[\"\\']?\\)")
 
-func encodeURL(src []byte, baseHref string, urlString string, start int, end int) []byte {
+func encodeURL(src []byte, baseHref string, urlString string, start int, end int, expire int64) []byte {
 	relURL := string(src[start:end])
 	// keep anchor and javascript links intact
 	if strings.Index(relURL, "#") == 0 || strings.Index(relURL, "javascript") == 0 {
 		return src
 	}
+	// keep url(data:image/png;base64
+	if strings.Index(relURL, "data:") == 0 {
+		return src
+	}
+
 	// Check if url is relative and make it absolute
 	if strings.Index(relURL, "http") != 0 {
 		var basePath *url.URL
@@ -33,12 +38,16 @@ func encodeURL(src []byte, baseHref string, urlString string, start int, end int
 		src = bytes.Replace(src, []byte(relURL), []byte(absURL), -1)
 		end = start + len(absURL)
 	}
-	newURL, _ := EncryptURL(string(src[start:end]))
+	urlStrNew := string(src[start:end])
+	pu := NewProxyUrl(urlStrNew, expire)
+
+	newURL, _ := pu.Encode()
+
 	return bytes.Replace(src, src[start:end], []byte(newURL), -1)
 }
 
 // HTMLURLReplace 对html内容中的url替换 成代理的url地址
-func HTMLURLReplace(body []byte, urlString string) []byte {
+func HTMLURLReplace(body []byte, urlString string, expire int64) []byte {
 	baseHrefMatch := reBase.FindSubmatch(body)
 	baseHref := ""
 	if len(baseHrefMatch) > 0 {
@@ -50,19 +59,19 @@ func HTMLURLReplace(body []byte, urlString string) []byte {
 			// replace src attribute
 			srcIndex := parts[2:4]
 			if srcIndex[0] != -1 {
-				return encodeURL(s, baseHref, urlString, srcIndex[0], srcIndex[1])
+				return encodeURL(s, baseHref, urlString, srcIndex[0], srcIndex[1], expire)
 			}
 
 			// replace href attribute
 			hrefIndex := parts[4:6]
 			if hrefIndex[0] != -1 {
-				return encodeURL(s, baseHref, urlString, hrefIndex[0], hrefIndex[1])
+				return encodeURL(s, baseHref, urlString, hrefIndex[0], hrefIndex[1], expire)
 			}
 
 			// replace form action attribute
 			actionIndex := parts[6:8]
 			if actionIndex[0] != -1 {
-				return encodeURL(s, baseHref, urlString, actionIndex[0], actionIndex[1])
+				return encodeURL(s, baseHref, urlString, actionIndex[0], actionIndex[1], expire)
 			}
 		}
 		return s
@@ -70,7 +79,7 @@ func HTMLURLReplace(body []byte, urlString string) []byte {
 }
 
 // CSSURLReplace 对css内容中的url替换为代理的地址
-func CSSURLReplace(body []byte, urlString string) []byte {
+func CSSURLReplace(body []byte, urlString string, expire int64) []byte {
 	baseHref := ""
 	return reCSS.ReplaceAllFunc(body, func(s []byte) []byte {
 		parts := reCSS.FindSubmatchIndex(s)
@@ -78,7 +87,7 @@ func CSSURLReplace(body []byte, urlString string) []byte {
 			// replace url attribute in css
 			pathIndex := parts[2:4]
 			if pathIndex[0] != -1 {
-				return encodeURL(s, baseHref, urlString, pathIndex[0], pathIndex[1])
+				return encodeURL(s, baseHref, urlString, pathIndex[0], pathIndex[1], expire)
 			}
 		}
 		return s
