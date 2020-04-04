@@ -1,19 +1,15 @@
-/**
-*
-*kexue shang wang
-*
-*use some gopee code: github.com/madhurjain/gopee
-*
- */
 package main
+
+//go:generate goasset
 
 import (
 	"flag"
 	"fmt"
-	"github.com/hidu/kx-proxy/handler"
 	"log"
 	"net/http"
 	"os"
+
+	"github.com/hidu/kx-proxy/handler"
 )
 
 var addr = flag.String("addr", ":8085", "listen addr,eg :8085")

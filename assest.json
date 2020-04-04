@@ -1,5 +1,0 @@
-{
-  "src":"assest",
-  "dest":"handler/assest.go",
-  "package":"handler"
-}

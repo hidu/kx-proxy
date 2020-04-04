@@ -2,7 +2,6 @@ package handler
 
 import (
 	"fmt"
-	"github.com/hidu/kx-proxy/util"
 	"io"
 	"io/ioutil"
 	"log"
@@ -10,6 +9,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/hidu/kx-proxy/util"
 )
 
 var kxKey = "KxKey"
@@ -43,13 +44,13 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	urlString := pu.GetUrlStr()
 
-	//检查url是否过期
+	// 检查url是否过期
 	if pu.IsExpire() {
 		http.Error(w, "expired", http.StatusBadRequest)
 		return
 	}
-	
-	if !pu.CheckSign(r){
+
+	if !pu.CheckSign(r) {
 		http.Error(w, "sign not match", http.StatusBadRequest)
 		return
 	}
@@ -65,9 +66,9 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 		logData["skey"] = skey
 
 		r.Header.Del("is_client")
-		if len(secreKeys) > 0 {
-			_, hasSkey := secreKeys[skey]
-			if skey == "" || !hasSkey {
+		if len(secretKeys) > 0 {
+			_, hasSKey := secretKeys[skey]
+			if skey == "" || !hasSKey {
 				logData["emsg"] = "required kxkey,get:" + skey
 				w.WriteHeader(http.StatusForbidden)
 				w.Write([]byte(r.Host + " required " + kxKey + "\nyourkey:" + skey))
@@ -113,7 +114,7 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 
 	contentType := ""
 
-	//Write all remote resp header to client
+	// Write all remote resp header to client
 	for headerKey, vs := range resp.Header {
 		headerVal := resp.Header.Get(headerKey)
 		if headerKey == "Content-Type" {
@@ -167,8 +168,8 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	if strings.Contains(contentType, "text/html") {
 		body, _ := ioutil.ReadAll(resp.Body)
 
-		encodedBody := util.HTMLURLReplace(body, urlString, pu.GetExpire(),r)
-		encodedBody = util.CSSURLReplace(encodedBody, urlString, pu.GetExpire(),r)
+		encodedBody := util.HTMLURLReplace(body, urlString, pu.GetExpire(), r)
+		encodedBody = util.CSSURLReplace(encodedBody, urlString, pu.GetExpire(), r)
 
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(encodedBody)))
 		w.WriteHeader(resp.StatusCode)
@@ -176,7 +177,7 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	} else if strings.Contains(contentType, "text/css") {
 		body, _ := ioutil.ReadAll(resp.Body)
 
-		encodedBody := util.CSSURLReplace(body, urlString, pu.GetExpire(),r)
+		encodedBody := util.CSSURLReplace(body, urlString, pu.GetExpire(), r)
 
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(encodedBody)))
 		w.WriteHeader(resp.StatusCode)

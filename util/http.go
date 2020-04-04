@@ -2,7 +2,7 @@ package util
 
 import (
 	"net/http"
-	//	"fmt"
+	// 	"fmt"
 )
 
 var encHeaders = map[string]int{"Cookie": 1, "User-Agent": 1, "Referer": 1, "Authorization": 1, "Set-Cookie": 1, "Refresh": 1, "Content-Encoding": 1}

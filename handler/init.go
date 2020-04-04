@@ -2,9 +2,10 @@ package handler
 
 import (
 	"fmt"
-	"github.com/hidu/kx-proxy/util"
 	"net/http"
 	"time"
+
+	"github.com/hidu/kx-proxy/util"
 )
 
 func init() {
@@ -12,8 +13,8 @@ func init() {
 	http.HandleFunc("/p/", proxyHandler)
 	http.HandleFunc("/get/", getHandler)
 	http.HandleFunc("/hello", helloHandler)
-	http.HandleFunc("/favicon.ico", Assest.FileHandlerFunc("/assest/favicon.png"))
-	http.Handle("/assest/", Assest.HTTPHandler("/"))
+	http.HandleFunc("/favicon.ico", Asset.FileHandlerFunc("/assest/favicon.png"))
+	http.Handle("/asset/", Asset.HTTPHandler("/"))
 }
 
 func helloHandler(w http.ResponseWriter, r *http.Request) {

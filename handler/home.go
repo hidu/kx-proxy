@@ -2,11 +2,12 @@ package handler
 
 import (
 	"fmt"
-	"github.com/hidu/kx-proxy/util"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
+
+	"github.com/hidu/kx-proxy/util"
 )
 
 func homeHandler(w http.ResponseWriter, r *http.Request) {
@@ -26,7 +27,7 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		expire, _ := strconv.ParseInt(r.FormValue("expire"), 10, 64)
 
-		pu := util.NewProxyUrl(validURL.String(), expire,r)
+		pu := util.NewProxyUrl(validURL.String(), expire, r)
 		encodedURL, err := pu.Encode()
 		if err != nil {
 			w.Write([]byte("build url failed:" + err.Error()))
@@ -35,11 +36,11 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/p/"+encodedURL, 302)
 		return
 	}
-	Assest.FileHandlerFunc("/assest/html/index.html")(w, r)
+	Asset.FileHandlerFunc("/asset/html/index.html")(w, r)
 }
 
-//404
-//当存在refer的时候发生404跳转，可能是其他js或者meta跳转等情况
+// 404
+// 当存在refer的时候发生404跳转，可能是其他js或者meta跳转等情况
 func handler404(w http.ResponseWriter, r *http.Request) {
 	refer := r.Referer()
 

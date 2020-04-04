@@ -1,9 +1,10 @@
 package handler
 
 import (
-	"github.com/hidu/kx-proxy/util"
 	"net/http"
 	"time"
+
+	"github.com/hidu/kx-proxy/util"
 )
 
 // BodyStreamEnc 作为服务端代理时时候对输出的内容进行加密处理
@@ -21,11 +22,11 @@ func copyHeader(dst, src http.Header) {
 
 var startTime = time.Now()
 
-var secreKeys = make(map[string]int)
+var secretKeys = make(map[string]int)
 
 func init() {
 	keys := util.LoadTxtConf("keys.txt")
 	for _, key := range keys {
-		secreKeys[key] = 1
+		secretKeys[key] = 1
 	}
 }

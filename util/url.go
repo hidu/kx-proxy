@@ -1,14 +1,14 @@
 package util
 
 import (
+	"bytes"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strings"
 	"time"
-	"net/http"
-	"bytes"
-	"encoding/binary"
 )
 
 type ProxyUrl struct {
@@ -20,7 +20,7 @@ type ProxyUrl struct {
 
 const URL_STOP_CHAR = '.'
 
-func NewProxyUrl(urlStr string, expire int64,r *http.Request) *ProxyUrl {
+func NewProxyUrl(urlStr string, expire int64, r *http.Request) *ProxyUrl {
 	pu := &ProxyUrl{
 		UrlStr:   urlStr,
 		Expire:   expire,
@@ -37,18 +37,17 @@ func (p *ProxyUrl) checkExpireAt() {
 	}
 }
 
-func (p *ProxyUrl)setSign(r *http.Request){
-	//only this check sign
-	if p.Expire == 1800{
-		p.Sign = GetRequestSign(r) 
+func (p *ProxyUrl) setSign(r *http.Request) {
+	// only this check sign
+	if p.Expire == 1800 {
+		p.Sign = GetRequestSign(r)
 	}
 }
 
-
-func (p *ProxyUrl)CheckSign(r *http.Request) bool{
-	//only this check sign
-	if p.Expire == 1800{
-		s:=GetRequestSign(r)
+func (p *ProxyUrl) CheckSign(r *http.Request) bool {
+	// only this check sign
+	if p.Expire == 1800 {
+		s := GetRequestSign(r)
 		return p.Sign == s
 	}
 	return true
@@ -90,7 +89,6 @@ func (p *ProxyUrl) SwitchUrl(urlNew string) {
 	p.checkExpireAt()
 }
 
-
 func (p *ProxyUrl) SwitchPath(urlPath string) {
 	u, err := url.Parse(p.UrlStr)
 	if err == nil {
@@ -125,12 +123,11 @@ func DecodeProxyUrl(encodedURL string) (p *ProxyUrl, err error) {
 	return p, nil
 }
 
-
-func GetRequestSign(r *http.Request)int64{
-	info:=strings.SplitN(r.RemoteAddr, ":", 2)
-	str:=fmt.Sprintf("%s:%s", info[0],r.UserAgent())
-	fmt.Println("sign_str:",str)
-	md5Val:=strMd5(str)
+func GetRequestSign(r *http.Request) int64 {
+	info := strings.SplitN(r.RemoteAddr, ":", 2)
+	str := fmt.Sprintf("%s:%s", info[0], r.UserAgent())
+	fmt.Println("sign_str:", str)
+	md5Val := strMd5(str)
 	b_buf := bytes.NewBuffer([]byte(md5Val))
 	var x int64
 	binary.Read(b_buf, binary.BigEndian, &x)
