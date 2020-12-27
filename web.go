@@ -5,7 +5,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 
@@ -29,7 +28,6 @@ func main() {
 	if httpPort == "" {
 		laddr = *addr
 	}
-	log.Println("bodyStreamEnc:", handler.BodyStreamEnc)
 
 	if len(laddr) < 2 {
 		fmt.Println("listening addr [", laddr, "] is wrong")

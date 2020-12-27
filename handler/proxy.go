@@ -1,19 +1,22 @@
 package handler
 
 import (
-	"fmt"
+	"bytes"
 	"io"
 	"io/ioutil"
 	"log"
-	"net"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hidu/kx-proxy/util"
 )
 
 var kxKey = "KxKey"
+var cache = newRespCache()
 
 func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	logData := make(map[string]interface{})
@@ -95,31 +98,30 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 		req.Header.Set("User-Agent", r.Header.Get("User-Agent"))
 	}
 
-	transport := &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		Dial: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
-		}).Dial,
-		TLSHandshakeTimeout: 10 * time.Second,
-	}
-	resp, err := transport.RoundTrip(req)
+	var resp *http.Response
 
-	if err != nil {
-		logData["emsg"] = "fetch_failed:" + err.Error()
-		http.Error(w, "Error Fetching "+urlString+"\n"+err.Error(), http.StatusBadGateway)
-		return
+	if !isClient {
+		resp = cache.Get(req)
+		if resp != nil {
+			logData["cache"] = 1
+		}
+	}
+
+	if resp == nil {
+		resp, err = http.DefaultTransport.RoundTrip(req)
+
+		if err != nil {
+			logData["emsg"] = "fetch_failed:" + err.Error()
+			http.Error(w, "Error Fetching "+urlString+"\n"+err.Error(), http.StatusBadGateway)
+			return
+		}
 	}
 	defer resp.Body.Close()
 
-	contentType := ""
+	contentType := resp.Header.Get("Content-Type")
 
 	// Write all remote resp header to client
 	for headerKey, vs := range resp.Header {
-		headerVal := resp.Header.Get(headerKey)
-		if headerKey == "Content-Type" {
-			contentType = headerVal
-		}
 		for _, v := range vs {
 			w.Header().Add(headerKey, v)
 		}
@@ -168,18 +170,38 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	if strings.Contains(contentType, "text/html") {
 		body, _ := ioutil.ReadAll(resp.Body)
 
-		encodedBody := util.HTMLURLReplace(body, urlString, pu.GetExpire(), r)
-		encodedBody = util.CSSURLReplace(encodedBody, urlString, pu.GetExpire(), r)
+		body = pu.Extension.Rewrite(body)
 
-		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(encodedBody)))
+		if pu.Extension.Preloading() {
+			go cache.CacheAll(body, urlString, req)
+		}
+
+		encodedBody := util.HTMLURLReplace(body, urlString, pu, r)
+		encodedBody = util.CSSURLReplace(encodedBody, urlString, pu, r)
+
+		var hBuf bytes.Buffer
+		if pu.Extension.Has("raw_url") {
+			raw := url.QueryEscape(urlString)
+			hBuf.WriteString(`<a href="/?raw=`)
+			hBuf.WriteString(raw)
+			hBuf.WriteString(`" target='_blank'>`)
+			hBuf.WriteString(urlString)
+			hBuf.WriteString("</a>")
+			hBuf.WriteString("<br/>")
+		}
+
+		w.Header().Set("Content-Length", strconv.Itoa(len(encodedBody)+hBuf.Len()))
 		w.WriteHeader(resp.StatusCode)
+		if hBuf.Len() > 0 {
+			w.Write(hBuf.Bytes())
+		}
 		w.Write(encodedBody)
 	} else if strings.Contains(contentType, "text/css") {
 		body, _ := ioutil.ReadAll(resp.Body)
 
-		encodedBody := util.CSSURLReplace(body, urlString, pu.GetExpire(), r)
+		encodedBody := util.CSSURLReplace(body, urlString, pu, r)
 
-		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(encodedBody)))
+		w.Header().Set("Content-Length", strconv.Itoa(len(encodedBody)))
 		w.WriteHeader(resp.StatusCode)
 		w.Write(encodedBody)
 	} else {
@@ -188,5 +210,131 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 		logData["io_copy_size"] = copySize
 		logData["io_copy_err"] = copyErr
 	}
+}
 
+func newRespCache() *respCache {
+	cd := &respCache{
+		datas: make(map[string]*cacheData),
+	}
+	go cd.gc()
+	return cd
+}
+
+type cacheData struct {
+	Resp *http.Response
+	Tm   time.Time
+}
+
+func (cd *cacheData) IsExpire() bool {
+	return cd.Tm.Unix() < time.Now().Unix()-5*60
+}
+
+type respCache struct {
+	datas map[string]*cacheData
+	lock  sync.RWMutex
+}
+
+func (rc *respCache) Get(r *http.Request) *http.Response {
+	key := rc.cacheKey(r)
+	rc.lock.RLock()
+	data := rc.datas[key]
+	defer rc.lock.RUnlock()
+	if data == nil {
+		return nil
+	}
+	delete(rc.datas, key)
+	return data.Resp
+}
+
+func (rc *respCache) gc() {
+	tk := time.NewTicker(5 * time.Minute)
+	for range tk.C {
+		rc.checkExpire()
+	}
+}
+
+func (rc *respCache) checkExpire() {
+	rc.lock.RLock()
+	var eKeys []string
+	for key, data := range rc.datas {
+		if data.IsExpire() {
+			eKeys = append(eKeys, key)
+		}
+	}
+	log.Printf("checkExpire total cache %d, expire=%d\n", len(rc.datas), len(eKeys))
+	rc.lock.RUnlock()
+
+	for _, key := range eKeys {
+		rc.lock.Lock()
+		delete(rc.datas, key)
+		rc.lock.Unlock()
+	}
+}
+
+func (rc *respCache) cacheKey(r *http.Request) string {
+	return r.URL.String()
+}
+
+const cacheMaxSize = 1024 * 1024
+
+func (rc *respCache) CacheAll(body []byte, urlNow string, r *http.Request) {
+	defer func() {
+		if re := recover(); re != nil {
+			log.Printf("CacheAll panic:%v \n", re)
+		}
+	}()
+	baseHref := util.BaseHref(body)
+	urls := util.AllLinks(body, baseHref, urlNow)
+	if len(urls) == 0 {
+		return
+	}
+	for _, u := range urls {
+		func() {
+			req, err := http.NewRequest("GET", u, nil)
+			if err != nil {
+				return
+			}
+			req.Header.Set("User-Agent", r.Header.Get("User-Agent"))
+
+			key := rc.cacheKey(req)
+			rc.lock.RLock()
+			vHas := rc.datas[key]
+			rc.lock.RUnlock()
+
+			// already has cache
+			if vHas != nil {
+				return
+			}
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				return
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != 200 {
+				return
+			}
+			if resp.ContentLength <= 0 || resp.ContentLength > cacheMaxSize {
+				return
+			}
+
+			if !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/") {
+				return
+			}
+			buf := bytes.NewBuffer(nil)
+			_, errCopy := io.Copy(buf, resp.Body)
+			if errCopy != nil {
+				return
+			}
+
+			resp.Body = ioutil.NopCloser(buf)
+			rc.lock.Lock()
+			rc.datas[key] = &cacheData{
+				Resp: resp,
+				Tm:   time.Now(),
+			}
+			rc.lock.Unlock()
+
+			log.Println("Preloading:", u)
+		}()
+	}
 }

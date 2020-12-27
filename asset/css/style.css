@@ -310,7 +310,10 @@ h1 {
 }
 
 .main .input-group .select_expire{
-    width:95px;
+    width:95px
+}
+.main .input-group .select_ext{
+    width:110px !important
 }
 .main .input-group .select_expire select{
 	padding:0 0;
@@ -345,6 +348,9 @@ h1 {
 		width: 95%
 	}
 	.main .input-group .select_expire{
-	    width:90px;
+	    width:90px
+	}
+	.main .input-group .select_ext{
+		width:110px !important
 	}
 }

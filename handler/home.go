@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"fmt"
+	"html/template"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -10,8 +10,17 @@ import (
 	"github.com/hidu/kx-proxy/util"
 )
 
+var homeTpl *template.Template
+
+func init() {
+	homeCode := Asset.GetContent("/asset/html/index.html")
+	tpl, err := template.New("home").Parse(string(homeCode))
+	if err != nil {
+		panic(err.Error())
+	}
+	homeTpl = tpl
+}
 func homeHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Println(r.URL.String())
 	// 404 for all other url path
 	if r.URL.Path[1:] != "" {
 		handler404(w, r)
@@ -27,7 +36,12 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		expire, _ := strconv.ParseInt(r.FormValue("expire"), 10, 64)
 
-		pu := util.NewProxyUrl(validURL.String(), expire, r)
+		opu := &util.ProxyUrl{
+			Extension: r.Form["ext"],
+			Expire:    expire,
+		}
+
+		pu := util.NewProxyUrl(validURL.String(), opu, r)
 		encodedURL, err := pu.Encode()
 		if err != nil {
 			w.Write([]byte("build url failed:" + err.Error()))
@@ -36,7 +50,13 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/p/"+encodedURL, 302)
 		return
 	}
-	Asset.FileHandlerFunc("/asset/html/index.html")(w, r)
+
+	rawURL := r.FormValue("raw")
+	datas := map[string]interface{}{}
+	datas["Raw"] = rawURL
+	_ = homeTpl.Execute(w, datas)
+
+	// Asset.FileHandlerFunc("/asset/html/index.html")(w, r)
 }
 
 // 404

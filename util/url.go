@@ -7,24 +7,67 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 )
 
 type ProxyUrl struct {
-	UrlStr   string `json:"u"`
-	Expire   int64  `json:"e"`
-	ExpireAt int64  `json:"a"`
-	Sign     int64  `json:"s"`
+	UrlStr    string     `json:"u"`
+	Expire    int64      `json:"e"`
+	ExpireAt  int64      `json:"a"`
+	Sign      int64      `json:"s"`
+	Extension Extensions `json:"x"`
+}
+
+type Extensions []string
+
+func (es Extensions) Has(key string) bool {
+	if len(es) == 0 {
+		return false
+	}
+	for _, k := range es {
+		if k == key {
+			return true
+		}
+	}
+	return false
+}
+
+func (es Extensions) Preloading() bool {
+	return es.Has("preloading")
+}
+
+var noJSReg = regexp.MustCompile(`(?is)<script.+?<\s*/\s*script>`)
+
+var noLinkReg = regexp.MustCompile(`(?is)<link\s.+?>`)
+var noStyleReg = regexp.MustCompile(`(?is)<style.+?<\s*/\s*style>`)
+
+var noImgReg = regexp.MustCompile(`(?is)<img\s.+?>`)
+
+func (es Extensions) Rewrite(body []byte) []byte {
+	if es.Has("no_js") {
+		body = noJSReg.ReplaceAll(body, []byte("<!-- script ignore -->"))
+	}
+	if es.Has("no_css") {
+		body = noLinkReg.ReplaceAll(body, []byte("<!-- link ignore -->"))
+		body = noStyleReg.ReplaceAll(body, []byte("<!-- style ignore -->"))
+	}
+	if es.Has("no_images") {
+		body = noImgReg.ReplaceAll(body, []byte("<!-- img ignore -->"))
+	}
+	return body
 }
 
 const URL_STOP_CHAR = '.'
 
-func NewProxyUrl(urlStr string, expire int64, r *http.Request) *ProxyUrl {
+func NewProxyUrl(urlStr string, old *ProxyUrl, r *http.Request) *ProxyUrl {
+	r.ParseForm()
 	pu := &ProxyUrl{
-		UrlStr:   urlStr,
-		Expire:   expire,
-		ExpireAt: 0,
+		UrlStr:    urlStr,
+		Expire:    old.GetExpire(),
+		ExpireAt:  0,
+		Extension: old.Extension,
 	}
 	pu.setSign(r)
 	pu.checkExpireAt()
