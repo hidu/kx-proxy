@@ -35,7 +35,14 @@ func (es Extensions) Has(key string) bool {
 }
 
 func (es Extensions) Preloading() bool {
-	return es.Has("preloading")
+	return es.Has("pre")
+}
+
+func (es Extensions) PreloadingSameDir() bool {
+	return es.Has("pre_sd")
+}
+func (es Extensions) PreloadingNext() bool {
+	return es.Has("pre_next")
 }
 
 var noJSReg = regexp.MustCompile(`(?is)<script.+?<\s*/\s*script>`)

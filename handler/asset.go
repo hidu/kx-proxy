@@ -469,23 +469,23 @@ QmCCAAAA//8BAAD//wfkti2cDAAA`
 	}
 
 	{
-		// 2 mtime: 2020-12-27 16:43:02 , size: 1939
+		// 2 mtime: 2020-12-31 22:19:32 , size: 2071
 		fileName := "/asset/html/index.html"
 		contentBase64 := `
-H4sIAAAAAAAA/5RVwW7jNhA9y1/B8lBfVqHt3SZpSqoo3By2KLaLtAu0p4CWxha7FMmSI9nuYv+9oCglTuFAyUnkzHvDR87DiH/z82/rP/76eEtqbHQx4/FD
-tDQ7QcHQGABZFTPeAEpS1tIHQEFb3ObXdAzXiC6Hf1rVCfpn/umnfG0bJ1FtNFBSWoNgUND3twKqHZxlrWVZQ762Br3VJ5xGHnK5A7H67vvVYrGghI1sIxsQ
-tFOwd9bjCWWvKqxFBZ0qIe83b4gyCpXUeSilBrGMElChhuLzIXfeHo6cpf2Ma2U+k9rDVlAmQwBkZQgs4FHDRRnCj92KEg9a0D4UagCkI62Pq9IaSvDoQFDV
-yB0wZ3b0acmt7CLsImbijVh65Bnf2OpYzDJeqY6UWoYgaLyYVAY8aaSKHckyXi/HbC+bntyjXvaIkwJGdhvpe2LGt9Y3TxN5DFEiS1TWCMooaQBrWwnqbMBE
-e1JPGddivvO2dUM2431suDTCIfYjgWPxvBz7mprWek0TL3NallBbXYEXNBrihjE4yMbF17YNo6STugVBv3y5uJP7r19pQYYjg5PmjKR8g4YE0FDiPRyc8vBA
-yXiKJxnzlJ2fU0rGi2UZty4+zKBjvpgXtz2P3JAPlrOUfQ59uZgXS9Io0yJMYyN4MaDDFHx5HfFvH/BvnFednD7mbTqH1Lb1U9irVcSueuykoOvLd6lyJY+T
-4q9W16l0JY+TlS8X73r01YvQw6jo3+YcnrPkgtG6LBqpeK2pHnf44JX/2wuf8RYhQf0Lgi4paVqNymkQdFw967xoPAQTlDU3084z9r4fPmFefLDkfb98Aefv
-hP/l9xdgy5DA6zBZ2XnQVlbK7ObFx4f1FMvL/X3r9by4k3vy6e7X13Qym27oY982LaI1w/gK7aZRjwMsdn6DJq9gK1uN/foIWts9LXaWfOul9z9wlkqcUcJZ
-pbo0e1m0QT+dh9jw5SyNfc76f/B/AAAA//8BAAD//yPZ1kuTBwAA`
+H4sIAAAAAAAA/5RWwXLbNhA9U1+B4FBdQkNSUtt1AXY6ig/pdNyM08y0Jw9ErkQ0IIACS0pqJv/eAUHZciOX9knA7nsPi8Wbpfird78tf//zwzWpsdHFhMcf
+oqXZCAqGxgDIqpjwBlCSspY+AAra4jq/pIdwjehy+LtVnaB/5J9+zpe2cRLVSgMlpTUIBgV9fy2g2sBJ1lKWNeRLa9BbfcRp5C6XGxCL739YzGYzStiBbWQD
+gnYKts56PKJsVYW1qKBTJeT95jVRRqGSOg+l1CDmsQRUqKH4vMudt7s9Z2k/4VqZz6T2sBaUyRAAWRkCC7jXcFaG8FO3oMSDFrQPhRoA6YHWx1VpDSW4dyCo
+auQGmDMb+lhyLbsIO4uZeCOWmjzhK1vti0nGK9WRUssQBI0Xk8qAJ41U8UWyjNfzQ7Yvmx7do573iCMBI7uV9D0x42vrm8eJPIYokSUqawRllDSAta0EdTZg
+oj3SU8a1mG+8bd2QzXgfGy6NsIvvkcBRPC8P75oerfWaJl7mtCyhtroCL2g0xBVjsJONi922DaOkk7oFQb98ObuV269faUGGI4OT5kRJ+QoNCaChxDvYOeXh
+npLxFE9lTFN2eqpScrhYlnHrYmOGOqazaXHd88gVubGcpexT6PPZtJiTRpkWYRwbwbMBHcbg88uIf3OPf+286uT4MW/SOaS2rR/DXiwidtFjRwu6PH+blCu5
+Hy3+YnGZpCu5H1U+n73t0RfPQg+jou/NKTxnyQUH67JopOKlpnrY4b1X/msvfMJbhAT1Dwg6p6RpNSqnQdDD6knnReMhmKCsuRp3nrF3/fAJ0+LGkvf98hmc
+vxL+l4/PwJYhgZdhVNl5uDOxIcUHD9rKSpkNuYEdfkt8lef/IxKqRxIfZQPknRo1svNwzPsGnudPMb3c3rVeT4tbuSWfbn99iZuycVM9eGfVIlozjNDQrhr1
+MESj+1Zo8grWstXYr/egtd3SYmPJd156/yNnSeJEJZxVqkvzn0Ur9l+IITb8cpY+PZz1/wP+BQAA//8BAAD//xFCZEYXCAAA`
 
 		contentGz := _assetBase64Decode(contentBase64, fileName)
 		oneFile := &assetFile{
 			name:        fileName,
-			mtime:       time.Unix(1609058582, 0),
+			mtime:       time.Unix(1609424372, 0),
 			content:     _assetGzipDecode(contentGz, fileName),
 			contentGzip: contentGz,
 		}

@@ -21,14 +21,14 @@ var cache = newRespCache()
 func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	logData := make(map[string]interface{})
 	startTime := time.Now()
-	defer (func() {
+	defer func() {
 		used := time.Now().Sub(startTime)
 		log.Println(
 			"remote:", r.RemoteAddr,
 			"path:", r.URL.Path,
 			"used:", used,
 			logData)
-	})()
+	}()
 
 	r.Header.Del("Connection")
 	encodedURL := r.URL.Path[len("/p/"):]
@@ -103,7 +103,7 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	if !isClient {
 		resp = cache.Get(req)
 		if resp != nil {
-			logData["cache"] = 1
+			logData["from_cache"] = 1
 		}
 	}
 
@@ -171,9 +171,13 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 		body, _ := ioutil.ReadAll(resp.Body)
 
 		body = pu.Extension.Rewrite(body)
+		if pu.Extension.PreloadingNext() {
+			go cache.Cache(body, urlString, req, cacheTypeNext)
+		} else if pu.Extension.PreloadingSameDir() {
+			go cache.Cache(body, urlString, req, cacheTypeSameDir)
 
-		if pu.Extension.Preloading() {
-			go cache.CacheAll(body, urlString, req)
+		} else if pu.Extension.Preloading() {
+			go cache.Cache(body, urlString, req, cacheTypeAll)
 		}
 
 		encodedBody := util.HTMLURLReplace(body, urlString, pu, r)
@@ -276,8 +280,38 @@ func (rc *respCache) cacheKey(r *http.Request) string {
 }
 
 const cacheMaxSize = 1024 * 1024
+const (
+	cacheTypeAll     = "all"
+	cacheTypeSameDir = "same"
+	cacheTypeNext    = "next"
+)
 
-func (rc *respCache) CacheAll(body []byte, urlNow string, r *http.Request) {
+func (rc *respCache) filterURLS(cacheType string, urlNow string, urls []string) []string {
+	if cacheType == cacheTypeAll {
+		return urls
+	}
+
+	pos := strings.LastIndex(urlNow, "/")
+	prefix := urlNow[0:pos]
+	var result []string
+	for _, u := range urls {
+		if !strings.HasSuffix(u, "/") && strings.HasPrefix(u, prefix) {
+			result = append(result, u)
+		}
+	}
+
+	if cacheType == cacheTypeNext {
+		for _, u := range result {
+			if strings.Compare(u, urlNow) > 0 {
+				return []string{u}
+			}
+		}
+	}
+
+	return result
+}
+
+func (rc *respCache) Cache(body []byte, urlNow string, r *http.Request, cacheType string) {
 	defer func() {
 		if re := recover(); re != nil {
 			log.Printf("CacheAll panic:%v \n", re)
@@ -285,6 +319,12 @@ func (rc *respCache) CacheAll(body []byte, urlNow string, r *http.Request) {
 	}()
 	baseHref := util.BaseHref(body)
 	urls := util.AllLinks(body, baseHref, urlNow)
+
+	urls = rc.filterURLS(cacheType, urlNow, urls)
+
+	// fmt.Println("urlNow",urlNow)
+	// fmt.Println("urls",urls)
+
 	if len(urls) == 0 {
 		return
 	}
