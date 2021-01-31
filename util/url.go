@@ -46,6 +46,7 @@ func (es Extensions) PreloadingNext() bool {
 }
 
 var noJSReg = regexp.MustCompile(`(?is)<script.+?<\s*/\s*script>`)
+var onReg = regexp.MustCompile(`\son.+["'].+['"]`) // onXXX=""
 
 var noLinkReg = regexp.MustCompile(`(?is)<link\s.+?>`)
 var noStyleReg = regexp.MustCompile(`(?is)<style.+?<\s*/\s*style>`)
@@ -55,6 +56,7 @@ var noImgReg = regexp.MustCompile(`(?is)<img\s.+?>`)
 func (es Extensions) Rewrite(body []byte) []byte {
 	if es.Has("no_js") {
 		body = noJSReg.ReplaceAll(body, []byte("<!-- script ignore -->"))
+		body = onReg.ReplaceAll(body, []byte(""))
 	}
 	if es.Has("no_css") {
 		body = noLinkReg.ReplaceAll(body, []byte("<!-- link ignore -->"))

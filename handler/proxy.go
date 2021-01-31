@@ -58,53 +58,17 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	isClient := r.Header.Get("is_client") == "1"
-
 	logData["visit_url"] = urlString
-	logData["is_client"] = isClient
-
-	skey := r.Header.Get(kxKey)
-	if isClient {
-		util.HeaderDec(r.Header)
-		logData["skey"] = skey
-
-		r.Header.Del("is_client")
-		if len(secretKeys) > 0 {
-			_, hasSKey := secretKeys[skey]
-			if skey == "" || !hasSKey {
-				logData["emsg"] = "required kxkey,get:" + skey
-				w.WriteHeader(http.StatusForbidden)
-				w.Write([]byte(r.Host + " required " + kxKey + "\nyourkey:" + skey))
-				return
-			}
-		}
-		r.Header.Del(kxKey)
-	}
 
 	req, _ := http.NewRequest(r.Method, urlString, r.Body)
-	if isClient {
-		hidden := r.Header.Get("hidden_ip")
-
-		logData["hidden_ip"] = hidden
-
-		copyHeader(req.Header, r.Header)
-		if hidden != "1" {
-			addrInfo := strings.Split(r.RemoteAddr, ":")
-			req.Header.Set("HTTP_X_FORWARDED_FOR", addrInfo[0])
-		}
-		req.Header.Del("hidden_ip")
-	} else {
-		req.Header.Set("Content-Type", r.Header.Get("Content-Type"))
-		req.Header.Set("User-Agent", r.Header.Get("User-Agent"))
-	}
+	req.Header.Set("Content-Type", r.Header.Get("Content-Type"))
+	req.Header.Set("User-Agent", r.Header.Get("User-Agent"))
 
 	var resp *http.Response
 
-	if !isClient {
-		resp = cache.Get(req)
-		if resp != nil {
-			logData["from_cache"] = 1
-		}
+	resp = cache.Get(req)
+	if resp != nil {
+		logData["from_cache"] = 1
 	}
 
 	if resp == nil {
@@ -128,28 +92,6 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	logData["resp_status"] = resp.StatusCode
-
-	if isClient {
-		var copySize int64
-		var copyErr error
-
-		util.HeaderEnc(w.Header())
-
-		if BodyStreamEnc {
-			w.Header().Set("_kx_enc_", "1")
-			w.WriteHeader(resp.StatusCode)
-
-			writer := util.CipherStreamWrite(skey, encodedURL, w)
-			copySize, copyErr = io.Copy(writer, resp.Body)
-
-		} else {
-			w.WriteHeader(resp.StatusCode)
-			copySize, copyErr = io.Copy(w, resp.Body)
-		}
-		logData["io_copy_size"] = copySize
-		logData["io_copy_err"] = copyErr
-		return
-	}
 
 	if resp.StatusCode == http.StatusMovedPermanently || resp.StatusCode == http.StatusFound {
 		location := resp.Header.Get("Location")
@@ -251,7 +193,7 @@ func (rc *respCache) Get(r *http.Request) *http.Response {
 }
 
 func (rc *respCache) gc() {
-	tk := time.NewTicker(5 * time.Minute)
+	tk := time.NewTicker(10 * time.Minute)
 	for range tk.C {
 		rc.checkExpire()
 	}
@@ -311,70 +253,90 @@ func (rc *respCache) filterURLS(cacheType string, urlNow string, urls []string) 
 	return result
 }
 
-func (rc *respCache) Cache(body []byte, urlNow string, r *http.Request, cacheType string) {
+func (rc *respCache) Cache(body []byte, urlNow string, reqRaw *http.Request, cacheType string) {
 	defer func() {
 		if re := recover(); re != nil {
 			log.Printf("CacheAll panic:%v \n", re)
 		}
 	}()
+
 	baseHref := util.BaseHref(body)
 	urls := util.AllLinks(body, baseHref, urlNow)
 
 	urls = rc.filterURLS(cacheType, urlNow, urls)
 
-	// fmt.Println("urlNow",urlNow)
-	// fmt.Println("urls",urls)
-
 	if len(urls) == 0 {
 		return
 	}
+
 	for _, u := range urls {
-		func() {
-			req, err := http.NewRequest("GET", u, nil)
-			if err != nil {
-				return
-			}
-			req.Header.Set("User-Agent", r.Header.Get("User-Agent"))
-
-			key := rc.cacheKey(req)
-			rc.lock.RLock()
-			vHas := rc.datas[key]
-			rc.lock.RUnlock()
-
-			// already has cache
-			if vHas != nil {
-				return
-			}
-			resp, err := http.DefaultClient.Do(req)
-			if err != nil {
-				return
-			}
-			defer resp.Body.Close()
-			if resp.StatusCode != 200 {
-				return
-			}
-			if resp.ContentLength <= 0 || resp.ContentLength > cacheMaxSize {
-				return
-			}
-
-			if !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/") {
-				return
-			}
-			buf := bytes.NewBuffer(nil)
-			_, errCopy := io.Copy(buf, resp.Body)
-			if errCopy != nil {
-				return
-			}
-
-			resp.Body = ioutil.NopCloser(buf)
-			rc.lock.Lock()
-			rc.datas[key] = &cacheData{
-				Resp: resp,
-				Tm:   time.Now(),
-			}
-			rc.lock.Unlock()
-
-			log.Println("Preloading:", u)
-		}()
+		rc.fetch(u, reqRaw)
 	}
+}
+
+func (rc *respCache) fetch(preloadURL string, reqRaw *http.Request) {
+	logData := map[string]interface{}{
+		"loaded": false,
+	}
+
+	defer func() {
+		log.Println("Preloading ", preloadURL, logData)
+	}()
+
+	req, err := http.NewRequest("GET", preloadURL, nil)
+	if err != nil {
+		log.Println("build request failed, error=", err)
+		return
+	}
+
+	req.Header.Set("User-Agent", reqRaw.Header.Get("User-Agent"))
+
+	key := rc.cacheKey(req)
+	rc.lock.RLock()
+	vHas := rc.datas[key]
+	rc.lock.RUnlock()
+
+	// already has cache
+	if vHas != nil {
+		log.Println("cache already has key=", key)
+		return
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		log.Println("get resp failed, err=", err)
+		return
+	}
+
+	contentType := resp.Header.Get("Content-Type")
+
+	logData["status"] = resp.StatusCode
+	logData["content_len"] = resp.ContentLength
+	logData["content_type"] = contentType
+
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return
+	}
+
+	if !strings.HasPrefix(contentType, "text/") {
+		return
+	}
+
+	buf := bytes.NewBuffer(nil)
+	_, errCopy := io.Copy(buf, io.LimitReader(resp.Body, cacheMaxSize))
+	if errCopy != nil {
+		return
+	}
+	logData["body_len"] = buf.Len()
+
+	resp.Body = ioutil.NopCloser(buf)
+	rc.lock.Lock()
+	rc.datas[key] = &cacheData{
+		Resp: resp,
+		Tm:   time.Now(),
+	}
+	rc.lock.Unlock()
+
+	logData["loaded"] = true
 }

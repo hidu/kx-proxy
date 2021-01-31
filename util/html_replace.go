@@ -18,6 +18,15 @@ func encodeURL(src []byte, baseHref string, urlString string, start int, end int
 	if strings.Index(relURL, "#") == 0 || strings.Index(relURL, "javascript") == 0 {
 		return src
 	}
+
+	relURL1 := strings.ToLower(relURL)
+	if strings.Index(relURL1, "javascript") == 0 {
+		if pu.Extension.Has("no_js") {
+			return []byte("")
+		}
+		return src
+	}
+
 	// keep url(data:image/png;base64
 	if strings.Index(relURL, "data:") == 0 {
 		return src
@@ -114,6 +123,8 @@ func AllLinks(body []byte, baseHref string, urlNow string) []string {
 		basePath, _ = url.Parse(baseHref)
 	}
 
+	var js = []byte("javascript")
+
 	rs := reAlink.FindAllSubmatch(body, -1)
 	var result []string
 	for _, rr := range rs {
@@ -121,13 +132,18 @@ func AllLinks(body []byte, baseHref string, urlNow string) []string {
 			if bytes.HasPrefix(r, []byte("<")) {
 				continue
 			}
+			if bytes.HasPrefix(r, []byte("#")) {
+				continue
+			}
 			if bytes.HasPrefix(r, []byte("data:")) {
 				continue
 			}
-			if bytes.HasPrefix(r, []byte("jsvascript")) {
+
+			if bytes.HasPrefix(r, js) {
 				continue
 			}
-			if bytes.HasPrefix(r, []byte("#")) {
+
+			if len(r) >= len(js) && bytes.Equal(bytes.ToLower(r[0:len(js)]), js) {
 				continue
 			}
 
