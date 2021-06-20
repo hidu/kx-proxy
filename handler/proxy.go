@@ -135,13 +135,21 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 			hBuf.WriteString("</a>")
 			hBuf.WriteString("<br/>")
 		}
+		hBuf.Write(encodedBody)
 
-		w.Header().Set("Content-Length", strconv.Itoa(len(encodedBody)+hBuf.Len()))
-		w.WriteHeader(resp.StatusCode)
-		if hBuf.Len() > 0 {
-			w.Write(hBuf.Bytes())
+		if pu.Extension.Has("ucss") {
+			hBuf.WriteString(`<link rel="stylesheet" href="/ucss/all.css" ?>`)
+			ru, erru := url.Parse(urlString)
+			if erru == nil {
+				hBuf.WriteString(`<link rel="stylesheet" href="/ucss/`)
+				hBuf.WriteString(ru.Hostname())
+				hBuf.WriteString(`.css" />`)
+			}
 		}
-		w.Write(encodedBody)
+
+		w.Header().Set("Content-Length", strconv.Itoa(hBuf.Len()))
+		w.WriteHeader(resp.StatusCode)
+		w.Write(hBuf.Bytes())
 	} else if strings.Contains(contentType, "text/css") {
 		body, _ := ioutil.ReadAll(resp.Body)
 

@@ -13,6 +13,7 @@ func init() {
 	http.HandleFunc("/p/", proxyHandler)
 	http.HandleFunc("/get/", getHandler)
 	http.HandleFunc("/hello", helloHandler)
+	http.HandleFunc("/ucss/", ucssHandler)
 	http.HandleFunc("/favicon.ico", Asset.FileHandlerFunc("/asset/favicon.png"))
 	http.Handle("/asset/", Asset.HTTPHandler("/"))
 }

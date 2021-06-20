@@ -65,6 +65,9 @@ func (es Extensions) Rewrite(body []byte) []byte {
 	if es.Has("no_images") {
 		body = noImgReg.ReplaceAll(body, []byte("<!-- img ignore -->"))
 	}
+	if es.Has("clean") {
+		body = clean(body)
+	}
 	return body
 }
 
