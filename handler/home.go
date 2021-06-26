@@ -29,7 +29,11 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 	enteredURL := r.FormValue("url")
 	if enteredURL != "" {
-		validURL, _ := url.Parse(enteredURL)
+		validURL, err := url.Parse(enteredURL)
+		if err != nil {
+			w.Write([]byte("Parse url failed:" + err.Error()))
+			return
+		}
 		// prepend http if not specified
 		if validURL.Scheme == "" {
 			validURL.Scheme = "http"

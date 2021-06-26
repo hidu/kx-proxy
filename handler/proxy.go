@@ -9,25 +9,20 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
+	"github.com/hidu/kx-proxy/internal"
 	"github.com/hidu/kx-proxy/util"
 )
 
 var kxKey = "KxKey"
-var cache = newRespCache()
 
 func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	logData := make(map[string]interface{})
-	startTime := time.Now()
+	reqStart := time.Now()
 	defer func() {
-		used := time.Now().Sub(startTime)
-		log.Println(
-			"remote:", r.RemoteAddr,
-			"path:", r.URL.Path,
-			"used:", used,
-			logData)
+		used := time.Now().Sub(reqStart)
+		log.Println("remote:", r.RemoteAddr, "path:", r.URL.Path, "used:", used, logData)
 	}()
 
 	r.Header.Del("Connection")
@@ -60,66 +55,98 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 
 	logData["visit_url"] = urlString
 
-	req, _ := http.NewRequest(r.Method, urlString, r.Body)
-	req.Header.Set("Content-Type", r.Header.Get("Content-Type"))
-	req.Header.Set("User-Agent", r.Header.Get("User-Agent"))
-
-	var resp *http.Response
-
-	resp = cache.Get(req)
-	if resp != nil {
-		logData["from_cache"] = 1
+	if r.URL.Query().Get("cache") == "no" {
+		fileCache.Del(urlString)
 	}
 
-	if resp == nil {
-		resp, err = http.DefaultTransport.RoundTrip(req)
+	var contentType internal.ContentType
+	var statusCode int
+	var body []byte
 
-		if err != nil {
-			logData["emsg"] = "fetch_failed:" + err.Error()
-			http.Error(w, "Error Fetching "+urlString+"\n"+err.Error(), http.StatusBadGateway)
+	cd := fileCache.Get(urlString)
+	if cd != nil {
+		logData["from_cache"] = 1
+		statusCode = 200
+		contentType = cd.ContentType()
+		body = cd.Body
+		for k, v := range cd.Header {
+			w.Header().Add(k, v)
+		}
+	} else {
+		logData["from_cache"] = 0
+		req, _ := http.NewRequest(r.Method, urlString, r.Body)
+		req.Header.Set("Content-Type", r.Header.Get("Content-Type"))
+		req.Header.Set("User-Agent", r.Header.Get("User-Agent"))
+		resp, err1 := internal.Client.Do(req)
+		if err1 != nil {
+			logData["emsg"] = "fetch_failed:" + err1.Error()
+			http.Error(w, "Error Fetching "+urlString+"\n"+err1.Error(), http.StatusBadGateway)
 			return
 		}
-	}
-	defer resp.Body.Close()
+		defer resp.Body.Close()
 
-	contentType := resp.Header.Get("Content-Type")
-
-	// Write all remote resp header to client
-	for headerKey, vs := range resp.Header {
-		for _, v := range vs {
-			w.Header().Add(headerKey, v)
+		contentType = internal.ContentType(resp.Header.Get("Content-Type"))
+		// Write all remote resp header to client
+		for headerKey, vs := range resp.Header {
+			for _, v := range vs {
+				w.Header().Add(headerKey, v)
+			}
 		}
-	}
 
-	logData["resp_status"] = resp.StatusCode
+		logData["resp_status"] = resp.StatusCode
 
-	if resp.StatusCode == http.StatusMovedPermanently || resp.StatusCode == http.StatusFound {
-		location := resp.Header.Get("Location")
-		if location != "" {
-			pu.SwitchUrl(location)
-			encodedURL, err := pu.Encode()
-			if err != nil {
-				logData["emsg"] = "Location_build_url failed" + err.Error()
-				w.Write([]byte("build url failed:" + err.Error()))
+		if resp.StatusCode == http.StatusMovedPermanently || resp.StatusCode == http.StatusFound {
+			location := resp.Header.Get("Location")
+			if location != "" {
+				pu.SwitchUrl(location)
+				encodedURL, err := pu.Encode()
+				if err != nil {
+					logData["emsg"] = "Location_build_url failed" + err.Error()
+					w.Write([]byte("build url failed:" + err.Error()))
+					return
+				}
+				http.Redirect(w, r, "/p/"+encodedURL, 302)
 				return
 			}
-			http.Redirect(w, r, "/p/"+encodedURL, 302)
-			return
+		}
+		statusCode = resp.StatusCode
+
+		// 缓存静态资源
+		if life := staticCacheTime(resp); life > 0 {
+			body, err = ioutil.ReadAll(resp.Body)
+			if err == nil && len(body) > 0 {
+				ncd := &internal.CacheData{
+					Header: map[string]string{
+						"Content-Type": string(contentType),
+					},
+					Body: body,
+				}
+				fileCache.SetWithTTL(urlString, ncd, life)
+				logData["static"] = "save_cache"
+			}
+		} else {
+			if contentType.IsHTML() || contentType.IsCss() {
+				body, _ = ioutil.ReadAll(resp.Body)
+			} else {
+				w.WriteHeader(resp.StatusCode)
+				copySize, copyErr := io.Copy(w, resp.Body)
+				logData["io_copy_size"] = copySize
+				logData["io_copy_err"] = copyErr
+				return
+			}
 		}
 	}
 
 	// Rewrite all urls
-	if strings.Contains(contentType, "text/html") {
-		body, _ := ioutil.ReadAll(resp.Body)
-
+	if contentType.IsHTML() {
 		body = pu.Extension.Rewrite(body)
 		if pu.Extension.PreloadingNext() {
-			go cache.Cache(body, urlString, req, cacheTypeNext)
+			go preLoader.PreLoad(body, urlString, internal.PreLoadTypeNext)
 		} else if pu.Extension.PreloadingSameDir() {
-			go cache.Cache(body, urlString, req, cacheTypeSameDir)
+			go preLoader.PreLoad(body, urlString, internal.PreLoadTypeSameDir)
 
 		} else if pu.Extension.Preloading() {
-			go cache.Cache(body, urlString, req, cacheTypeAll)
+			go preLoader.PreLoad(body, urlString, internal.PreLoadTypeAll)
 		}
 
 		encodedBody := util.HTMLURLReplace(body, urlString, pu, r)
@@ -148,203 +175,51 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		w.Header().Set("Content-Length", strconv.Itoa(hBuf.Len()))
-		w.WriteHeader(resp.StatusCode)
+		w.WriteHeader(statusCode)
 		w.Write(hBuf.Bytes())
-	} else if strings.Contains(contentType, "text/css") {
-		body, _ := ioutil.ReadAll(resp.Body)
+		return
+	}
 
+	if contentType.IsCss() {
 		encodedBody := util.CSSURLReplace(body, urlString, pu, r)
-
 		w.Header().Set("Content-Length", strconv.Itoa(len(encodedBody)))
-		w.WriteHeader(resp.StatusCode)
+		w.WriteHeader(statusCode)
 		w.Write(encodedBody)
-	} else {
-		w.WriteHeader(resp.StatusCode)
-		copySize, copyErr := io.Copy(w, resp.Body)
-		logData["io_copy_size"] = copySize
-		logData["io_copy_err"] = copyErr
-	}
-}
-
-func newRespCache() *respCache {
-	cd := &respCache{
-		datas: make(map[string]*cacheData),
-	}
-	go cd.gc()
-	return cd
-}
-
-type cacheData struct {
-	Resp *http.Response
-	Tm   time.Time
-}
-
-func (cd *cacheData) IsExpire() bool {
-	return cd.Tm.Unix() < time.Now().Unix()-5*60
-}
-
-type respCache struct {
-	datas map[string]*cacheData
-	lock  sync.RWMutex
-}
-
-func (rc *respCache) Get(r *http.Request) *http.Response {
-	key := rc.cacheKey(r)
-	rc.lock.RLock()
-	data := rc.datas[key]
-	defer rc.lock.RUnlock()
-	if data == nil {
-		return nil
-	}
-	delete(rc.datas, key)
-	return data.Resp
-}
-
-func (rc *respCache) gc() {
-	tk := time.NewTicker(10 * time.Minute)
-	for range tk.C {
-		rc.checkExpire()
-	}
-}
-
-func (rc *respCache) checkExpire() {
-	rc.lock.RLock()
-	var eKeys []string
-	for key, data := range rc.datas {
-		if data.IsExpire() {
-			eKeys = append(eKeys, key)
-		}
-	}
-	log.Printf("checkExpire total cache %d, expire=%d\n", len(rc.datas), len(eKeys))
-	rc.lock.RUnlock()
-
-	for _, key := range eKeys {
-		rc.lock.Lock()
-		delete(rc.datas, key)
-		rc.lock.Unlock()
-	}
-}
-
-func (rc *respCache) cacheKey(r *http.Request) string {
-	return r.URL.String()
-}
-
-const cacheMaxSize = 1024 * 1024
-const (
-	cacheTypeAll     = "all"
-	cacheTypeSameDir = "same"
-	cacheTypeNext    = "next"
-)
-
-func (rc *respCache) filterURLS(cacheType string, urlNow string, urls []string) []string {
-	if cacheType == cacheTypeAll {
-		return urls
+		return
 	}
 
-	pos := strings.LastIndex(urlNow, "/")
-	prefix := urlNow[0:pos]
-	var result []string
-	for _, u := range urls {
-		if !strings.HasSuffix(u, "/") && strings.HasPrefix(u, prefix) {
-			result = append(result, u)
+	w.WriteHeader(statusCode)
+	w.Write(body)
+}
+
+func staticCacheTime(resp *http.Response) time.Duration {
+	if resp.Header.Get("ETag") != "" &&
+		resp.ContentLength > 0 &&
+		resp.ContentLength < internal.CacheMaxSize {
+		return 12 * time.Hour
+	}
+
+	if resp.Header.Get("X-Cache-Status") == "HIT" {
+		return 12 * time.Hour
+	}
+
+	ct := internal.ContentType(resp.Header.Get("Content-Type"))
+	if ct.IsStaticFile() {
+		return 12 * time.Hour
+	}
+
+	if ct.IsCss() {
+		return time.Hour
+	}
+
+	path := resp.Request.URL.Path
+	for _, e := range staticExts {
+		if strings.HasSuffix(path, e) {
+			return 6 * time.Hour
 		}
 	}
 
-	if cacheType == cacheTypeNext {
-		for _, u := range result {
-			if strings.Compare(u, urlNow) > 0 {
-				return []string{u}
-			}
-		}
-	}
-
-	return result
+	return 0
 }
 
-func (rc *respCache) Cache(body []byte, urlNow string, reqRaw *http.Request, cacheType string) {
-	defer func() {
-		if re := recover(); re != nil {
-			log.Printf("CacheAll panic:%v \n", re)
-		}
-	}()
-
-	baseHref := util.BaseHref(body)
-	urls := util.AllLinks(body, baseHref, urlNow)
-
-	urls = rc.filterURLS(cacheType, urlNow, urls)
-
-	if len(urls) == 0 {
-		return
-	}
-
-	for _, u := range urls {
-		rc.fetch(u, reqRaw)
-	}
-}
-
-func (rc *respCache) fetch(preloadURL string, reqRaw *http.Request) {
-	logData := map[string]interface{}{
-		"loaded": false,
-	}
-
-	defer func() {
-		log.Println("Preloading ", preloadURL, logData)
-	}()
-
-	req, err := http.NewRequest("GET", preloadURL, nil)
-	if err != nil {
-		log.Println("build request failed, error=", err)
-		return
-	}
-
-	req.Header.Set("User-Agent", reqRaw.Header.Get("User-Agent"))
-
-	key := rc.cacheKey(req)
-	rc.lock.RLock()
-	vHas := rc.datas[key]
-	rc.lock.RUnlock()
-
-	// already has cache
-	if vHas != nil {
-		log.Println("cache already has key=", key)
-		return
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		log.Println("get resp failed, err=", err)
-		return
-	}
-
-	contentType := resp.Header.Get("Content-Type")
-
-	logData["status"] = resp.StatusCode
-	logData["content_len"] = resp.ContentLength
-	logData["content_type"] = contentType
-
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return
-	}
-
-	if !strings.HasPrefix(contentType, "text/") {
-		return
-	}
-
-	buf := bytes.NewBuffer(nil)
-	_, errCopy := io.Copy(buf, io.LimitReader(resp.Body, cacheMaxSize))
-	if errCopy != nil {
-		return
-	}
-	logData["body_len"] = buf.Len()
-
-	resp.Body = ioutil.NopCloser(buf)
-	rc.lock.Lock()
-	rc.datas[key] = &cacheData{
-		Resp: resp,
-		Tm:   time.Now(),
-	}
-	rc.lock.Unlock()
-
-	logData["loaded"] = true
-}
+var staticExts = []string{".png", ".jpg", ".jpeg", ".gif", ".css", ".js"}

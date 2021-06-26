@@ -12,6 +12,7 @@ import (
 )
 
 var addr = flag.String("addr", ":8085", "listen addr,eg :8085")
+var cd = flag.String("cache_dir", "./cache/", "cache dir")
 
 func init() {
 	flag.BoolVar(&handler.BodyStreamEnc, "enc", false, "encrypts the body stream")
@@ -33,6 +34,7 @@ func main() {
 		fmt.Println("listening addr [", laddr, "] is wrong")
 		os.Exit(1)
 	}
+	handler.InitCache(*cd)
 
 	fmt.Printf("kx-proxy listening on :%s\n", laddr)
 	err := http.ListenAndServe(laddr, nil)
