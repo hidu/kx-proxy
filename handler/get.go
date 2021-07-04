@@ -6,10 +6,9 @@ import (
 	"strings"
 )
 
-/**
-* handle url http://aaa.com/get/?url=http://www.baidu.com/
- */
-func getHandler(w http.ResponseWriter, r *http.Request) {
+//
+// handle url http://aaa.com/get/?url=http://www.baidu.com/
+func (k *KxProxy) handlerGet(w http.ResponseWriter, r *http.Request) {
 	cusURL := ""
 	if strings.HasPrefix(r.URL.RawQuery, "url=") {
 		cusURL = r.URL.RawQuery[4:]

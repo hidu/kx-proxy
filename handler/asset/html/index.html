@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta http-equiv="Cache-Control" content="max-age=2592000" />
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>kx-proxy</title>
+<link href="/asset/css/style.css?v2" rel="stylesheet">
+<link rel="icon" type="image/png" href="/asset/favicon.png"/>
+</head>
+
+<body>
+	<div class="container main">
+		<h1 class="title"><a href="/">kx-proxy</a></h1>
+		<div class="navbar">
+			<form class="navbar-form" action="/" method="post">
+				<div class="input-group">
+					<input type="text" required class="form-control" name="url" 
+						pattern="^(http[s]?)://.+"
+						placeholder="http://example.com/" value="{{.url}}"> 
+					<span class="input-group-btn select_expire"> 
+						<select name='expire' class="form-control ">
+							<option value='0' {{.expire|selected "0"}}>Expire : No</option>
+							<option value='60' {{.expire|selected "60"}}>1 minute</option>
+							<option value='600' {{.expire|selected "600"}}>10 minutes</option>
+							<option value='1800' {{.expire|selected "1800"}}>30 minutes,private</option>
+							<option value='3600' {{.expire|selected "3600"}}>1 hour</option>
+							<option value='7200' {{.expire|selected "7200"}}>2 hours</option>
+							<option value='86400' {{.expire|selected "86400"}}>1 day</option>
+							<option value='172800' {{.expire|selected "172800"}}>2 days</option>
+							<option value='604800' {{.expire|selected "604800"}}>7 days</option>
+							<option value='2592000' {{.expire|selected "2592000"}}>30 days</option>
+						</select>
+					</span>
+					<span class="input-group-btn select_expire select_ext">
+						<select name='ext' class="form-control "  size="1" multiple="multiple">
+							<option value=''>Extension:No</option>
+							<option value='no_images' {{.ext|selected "no_images"}}>No Images</option>
+							<option value='no_js' {{.ext|selected_def "no_js"}}>No JS</option>
+							<option value='no_css' {{.ext|selected "no_css"}}>No Css</option>
+							<option value='cache' {{.ext|selected_def "cache"}}>Cache</option>
+							<option value='clean' {{.ext|selected_def "clean"}}>Clean</option>
+							<option value='raw_url' {{.ext|selected_def "raw_url"}}>Raw URL</option>
+							<option value='ucss' {{.ext|selected_def "ucss"}}>Custom js/Css</option>
+							<option value='pre_next' {{.ext|selected_def "pre_next"}}>Preloading Next</option>
+							<option value='pre_sd' {{.ext|selected "pre_sd"}}>Preloading Same Dir</option>
+							<option value='pre' {{.ext|selected "pre"}}>Preloading All</option>
+							<option value='no_cache' {{.ext|selected "no_cache"}}>No Cache</option>
+						</select>
+					</span>
+						
+					<span class="input-group-btn">
+						<button type="submit" class="btn btn-default btn-yellow">go &rarr;</button>
+					</span>
+				</div>
+			</form>
+		</div>
+	</div>
+</body>
+</html>

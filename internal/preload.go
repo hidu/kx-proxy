@@ -59,7 +59,7 @@ var Client = &http.Client{
 
 const CacheMaxSize = 1024 * 1024
 
-func (rc *PreLoad) Fetch(preloadURL string) {
+func (rc *PreLoad) Fetch(pu *util.ProxyUrl, preloadURL string) {
 	logData := map[string]interface{}{
 		"loaded": false,
 	}
@@ -68,10 +68,12 @@ func (rc *PreLoad) Fetch(preloadURL string) {
 		log.Println("Preloading ", preloadURL, logData)
 	}()
 
-	// already has cache
-	if rc.FileCache.Has(preloadURL) {
-		logData["msg"] = "cache already exists"
-		return
+	if !pu.Extension.NoCache() {
+		// already has cache
+		if rc.FileCache.Has(preloadURL) {
+			logData["msg"] = "cache already exists"
+			return
+		}
 	}
 
 	req, err := http.NewRequest("GET", preloadURL, nil)
@@ -123,12 +125,14 @@ func (rc *PreLoad) Fetch(preloadURL string) {
 	logData["loaded"] = true
 }
 
-func (rc *PreLoad) PreLoad(body []byte, urlNow string, cacheType string) {
+func (rc *PreLoad) PreLoad(pu *util.ProxyUrl, body []byte, cacheType string) {
 	defer func() {
 		if re := recover(); re != nil {
 			log.Printf("CacheAll panic:%v \n", re)
 		}
 	}()
+
+	urlNow := pu.GetUrlStr()
 
 	baseHref := util.BaseHref(body)
 	urls := util.AllLinks(body, baseHref, urlNow)
@@ -140,6 +144,6 @@ func (rc *PreLoad) PreLoad(body []byte, urlNow string, cacheType string) {
 	}
 
 	for _, u := range urls {
-		rc.Fetch(u)
+		rc.Fetch(pu, u)
 	}
 }

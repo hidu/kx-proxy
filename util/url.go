@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -18,6 +19,7 @@ type ProxyUrl struct {
 	ExpireAt  int64      `json:"a"`
 	Sign      int64      `json:"s"`
 	Extension Extensions `json:"x"`
+	Ref       string     `json:"r"`
 }
 
 type Extensions []string
@@ -45,6 +47,13 @@ func (es Extensions) PreloadingNext() bool {
 	return es.Has("pre_next")
 }
 
+func (es Extensions) Cache() bool {
+	return es.Has("cache")
+}
+func (es Extensions) NoCache() bool {
+	return es.Has("no_cache")
+}
+
 var noJSReg = regexp.MustCompile(`(?is)<script.+?<\s*/\s*script>`)
 var onReg = regexp.MustCompile(`\son.+["'].+['"]`) // onXXX=""
 
@@ -52,6 +61,7 @@ var noLinkReg = regexp.MustCompile(`(?is)<link\s.+?>`)
 var noStyleReg = regexp.MustCompile(`(?is)<style.+?<\s*/\s*style>`)
 
 var noImgReg = regexp.MustCompile(`(?is)<img\s.+?>`)
+var noImgReg1 = regexp.MustCompile(`(?is)<input\s+[^>]*type=["\']?image["\']?\s.+?>`)
 
 func (es Extensions) Rewrite(body []byte) []byte {
 	if es.Has("no_js") {
@@ -62,8 +72,14 @@ func (es Extensions) Rewrite(body []byte) []byte {
 		body = noLinkReg.ReplaceAll(body, []byte("<!-- link ignore -->"))
 		body = noStyleReg.ReplaceAll(body, []byte("<!-- style ignore -->"))
 	}
+
 	if es.Has("no_images") {
 		body = noImgReg.ReplaceAll(body, []byte("<!-- img ignore -->"))
+		body = noImgReg1.ReplaceAllFunc(body, func(bs []byte) []byte {
+			bs = bytes.ReplaceAll(bs, []byte("image"), []byte("button"))
+			bs = bytes.ReplaceAll(bs, []byte("src="), []byte("img_ignore_src="))
+			return bs
+		})
 	}
 	if es.Has("clean") {
 		body = clean(body)
@@ -152,6 +168,15 @@ func (p *ProxyUrl) SwitchPath(urlPath string) {
 		p.UrlStr = u.String()
 	}
 	p.checkExpireAt()
+}
+
+func (p *ProxyUrl) URLValues() url.Values {
+	vs := url.Values{}
+	vs.Add("url", p.UrlStr)
+	vs.Add("expire", strconv.FormatInt(p.Expire, 10))
+	vs.Add("expire", strconv.FormatInt(p.Expire, 10))
+	vs.Add("ext", strings.Join(p.Extension, ","))
+	return vs
 }
 
 func DecodeProxyUrl(encodedURL string) (p *ProxyUrl, err error) {

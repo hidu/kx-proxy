@@ -1,5 +1,0 @@
-{
-  "src":"asset",
-  "dest":"handler/asset.go",
-  "package":"handler"
-}

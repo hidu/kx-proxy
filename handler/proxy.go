@@ -2,12 +2,13 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
-	"strconv"
+	"os"
 	"strings"
 	"time"
 
@@ -15,10 +16,19 @@ import (
 	"github.com/hidu/kx-proxy/util"
 )
 
-var kxKey = "KxKey"
+var doProxy = &DoProxy{}
 
-func proxyHandler(w http.ResponseWriter, r *http.Request) {
-	logData := make(map[string]interface{})
+func (k *KxProxy) handlerProxy(w http.ResponseWriter, r *http.Request) {
+	doProxy.ServeHTTP(w, r)
+}
+
+var _ http.Handler = (*DoProxy)(nil)
+
+type DoProxy struct {
+}
+
+func (d *DoProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	logData := make(internal.LogData)
 	reqStart := time.Now()
 	defer func() {
 		used := time.Now().Sub(reqStart)
@@ -27,12 +37,6 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 
 	r.Header.Del("Connection")
 	encodedURL := r.URL.Path[len("/p/"):]
-
-	kxURL := r.Header.Get("kx_url")
-	if kxURL != "" {
-		encodedURL = kxURL
-	}
-	r.Header.Del("kx_url")
 
 	pu, err := util.DecodeProxyUrl(encodedURL)
 	if err != nil {
@@ -59,151 +63,271 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 		fileCache.Del(urlString)
 	}
 
-	var contentType internal.ContentType
-	var statusCode int
-	var body []byte
+	ctx := r.Context()
+	ctx = context.WithValue(ctx, ctxKeyLogData, logData)
+	d.do(ctx, w, r, pu)
+}
 
-	cd := fileCache.Get(urlString)
-	if cd != nil {
-		logData["from_cache"] = 1
-		statusCode = 200
-		contentType = cd.ContentType()
-		body = cd.Body
-		for k, v := range cd.Header {
-			w.Header().Add(k, v)
-		}
-	} else {
-		logData["from_cache"] = 0
-		req, _ := http.NewRequest(r.Method, urlString, r.Body)
-		req.Header.Set("Content-Type", r.Header.Get("Content-Type"))
-		req.Header.Set("User-Agent", r.Header.Get("User-Agent"))
-		resp, err1 := internal.Client.Do(req)
-		if err1 != nil {
-			logData["emsg"] = "fetch_failed:" + err1.Error()
-			http.Error(w, "Error Fetching "+urlString+"\n"+err1.Error(), http.StatusBadGateway)
+type ctxKeyType uint8
+
+const (
+	ctxKeyLogData ctxKeyType = iota
+)
+
+func getLogData(ctx context.Context) internal.LogData {
+	return ctx.Value(ctxKeyLogData).(internal.LogData)
+}
+
+func (d *DoProxy) do(ctx context.Context, w http.ResponseWriter, r *http.Request, pu *util.ProxyUrl) {
+	urlString := pu.GetUrlStr()
+	logData := getLogData(ctx)
+
+	var resp *internal.Response
+
+	if pu.Extension.Cache() && !pu.Extension.NoCache() {
+		resp = d.fromCache(urlString)
+	}
+
+	fromCache := resp != nil
+
+	logData["from_cache"] = fromCache
+
+	if resp == nil {
+		var err error
+		resp, err = d.directGet(r, pu)
+		if err != nil {
+			logData["emsg"] = "fetch_failed:" + err.Error()
+			http.Error(w, "Error Fetching "+urlString+"\n"+err.Error(), http.StatusBadGateway)
 			return
-		}
-		defer resp.Body.Close()
-
-		contentType = internal.ContentType(resp.Header.Get("Content-Type"))
-		// Write all remote resp header to client
-		for headerKey, vs := range resp.Header {
-			for _, v := range vs {
-				w.Header().Add(headerKey, v)
-			}
-		}
-
-		logData["resp_status"] = resp.StatusCode
-
-		if resp.StatusCode == http.StatusMovedPermanently || resp.StatusCode == http.StatusFound {
-			location := resp.Header.Get("Location")
-			if location != "" {
-				pu.SwitchUrl(location)
-				encodedURL, err := pu.Encode()
-				if err != nil {
-					logData["emsg"] = "Location_build_url failed" + err.Error()
-					w.Write([]byte("build url failed:" + err.Error()))
-					return
-				}
-				http.Redirect(w, r, "/p/"+encodedURL, 302)
-				return
-			}
-		}
-		statusCode = resp.StatusCode
-
-		// 缓存静态资源
-		if life := staticCacheTime(resp); life > 0 {
-			body, err = ioutil.ReadAll(resp.Body)
-			if err == nil && len(body) > 0 {
-				ncd := &internal.CacheData{
-					Header: map[string]string{
-						"Content-Type": string(contentType),
-					},
-					Body: body,
-				}
-				fileCache.SetWithTTL(urlString, ncd, life)
-				logData["static"] = "save_cache"
-			}
-		} else {
-			if contentType.IsHTML() || contentType.IsCss() {
-				body, _ = ioutil.ReadAll(resp.Body)
-			} else {
-				w.WriteHeader(resp.StatusCode)
-				copySize, copyErr := io.Copy(w, resp.Body)
-				logData["io_copy_size"] = copySize
-				logData["io_copy_err"] = copyErr
-				return
-			}
 		}
 	}
 
-	// Rewrite all urls
-	if contentType.IsHTML() {
-		body = pu.Extension.Rewrite(body)
-		if pu.Extension.PreloadingNext() {
-			go preLoader.PreLoad(body, urlString, internal.PreLoadTypeNext)
-		} else if pu.Extension.PreloadingSameDir() {
-			go preLoader.PreLoad(body, urlString, internal.PreLoadTypeSameDir)
+	logData["resp_status"] = resp.StatusCode
 
-		} else if pu.Extension.Preloading() {
-			go preLoader.PreLoad(body, urlString, internal.PreLoadTypeAll)
-		}
-
-		encodedBody := util.HTMLURLReplace(body, urlString, pu, r)
-		encodedBody = util.CSSURLReplace(encodedBody, urlString, pu, r)
-
-		var hBuf bytes.Buffer
-		if pu.Extension.Has("raw_url") {
-			raw := url.QueryEscape(urlString)
-			hBuf.WriteString(`<a href="/?raw=`)
-			hBuf.WriteString(raw)
-			hBuf.WriteString(`" target='_blank'>`)
-			hBuf.WriteString(urlString)
-			hBuf.WriteString("</a>")
-			hBuf.WriteString("<br/>")
-		}
-		hBuf.Write(encodedBody)
-
-		if pu.Extension.Has("ucss") {
-			hBuf.WriteString(`<link rel="stylesheet" href="/ucss/all.css" ?>`)
-			ru, erru := url.Parse(urlString)
-			if erru == nil {
-				hBuf.WriteString(`<link rel="stylesheet" href="/ucss/`)
-				hBuf.WriteString(ru.Hostname())
-				hBuf.WriteString(`.css" />`)
-			}
-		}
-
-		w.Header().Set("Content-Length", strconv.Itoa(hBuf.Len()))
-		w.WriteHeader(statusCode)
-		w.Write(hBuf.Bytes())
+	rg, err := d.redirect(resp, pu)
+	if err != nil {
+		logData["emsg"] = "rediect_failed:" + err.Error()
+		http.Error(w, "Error Redirect "+urlString+"\n"+err.Error(), http.StatusBadGateway)
 		return
+	}
+
+	if rg != "" {
+		http.Redirect(w, r, rg, 302)
+		return
+	}
+
+	// 是否允许 cache
+	canCache := pu.Extension.Cache() && !fromCache && resp.ContentType.CanCache()
+
+	canCache = canCache && r.URL.Query().Get("no_cache") == ""
+
+	logData["canCache"] = canCache
+
+	if canCache {
+		cached := d.trySetCache(pu, resp)
+		logData["save_cache"] = cached
+	}
+
+	d.reWriteResp(r, resp, pu)
+
+	wrote, err := resp.WriteTo(w)
+	logData["resp_wrote_size"] = wrote
+	logData["resp_wrote_err"] = err
+}
+
+func (d *DoProxy) fromCache(urlString string) *internal.Response {
+	cd := fileCache.Get(urlString)
+	if cd != nil {
+		return &internal.Response{
+			StatusCode:  200,
+			ContentType: cd.ContentType(),
+			Body:        cd.Body,
+			HeaderMap:   cd.Header,
+		}
+	}
+	return nil
+}
+
+func (d *DoProxy) directGet(r *http.Request, pu *util.ProxyUrl) (*internal.Response, error) {
+	urlString := pu.GetUrlStr()
+	req, err := http.NewRequestWithContext(r.Context(), r.Method, urlString, r.Body)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", r.Header.Get("Content-Type"))
+	req.Header.Set("User-Agent", r.Header.Get("User-Agent"))
+	resp, err1 := internal.Client.Do(req)
+	if err1 != nil {
+		return nil, err1
+	}
+	contentType := internal.ContentType(resp.Header.Get("Content-Type"))
+	if contentType.IsText() {
+		defer resp.Body.Close()
+		body, err2 := ioutil.ReadAll(io.LimitReader(resp.Body, internal.CacheMaxSize))
+		if err2 != nil {
+			return nil, err2
+		}
+		return &internal.Response{
+			StatusCode:  resp.StatusCode,
+			ContentType: contentType,
+			Header:      resp.Header,
+			Body:        body,
+			Raw:         resp,
+		}, nil
+	}
+
+	return &internal.Response{
+		StatusCode:  resp.StatusCode,
+		ContentType: contentType,
+		Header:      resp.Header,
+		Raw:         resp,
+	}, nil
+}
+
+func (d *DoProxy) redirect(resp *internal.Response, pu *util.ProxyUrl) (string, error) {
+	if resp.StatusCode == http.StatusMovedPermanently || resp.StatusCode == http.StatusFound {
+		location := resp.Header.Get("Location")
+		if location != "" {
+			pu.SwitchUrl(location)
+			encodedURL, err := pu.Encode()
+			if err != nil {
+				return "", err
+			}
+			return "/p/" + encodedURL, nil
+		}
+	}
+	return "", nil
+}
+
+func (d *DoProxy) trySetCache(pu *util.ProxyUrl, resp *internal.Response) bool {
+	life := staticCacheTime(resp)
+	if life <= 0 {
+		return false
+	}
+	if len(resp.Body) == 0 {
+		return false
+	}
+	ncd := &internal.CacheData{
+		Header: map[string]string{
+			"Content-Type": string(resp.ContentType),
+		},
+		Body: resp.Body,
+	}
+	fileCache.SetWithTTL(pu.GetUrlStr(), ncd, life)
+	return true
+}
+
+func (d *DoProxy) reWriteResp(r *http.Request, resp *internal.Response, pu *util.ProxyUrl) *internal.Response {
+	contentType := resp.ContentType
+
+	if contentType.IsHTML() {
+		return d.reWriteHTML(r, resp, pu)
 	}
 
 	if contentType.IsCss() {
-		encodedBody := util.CSSURLReplace(body, urlString, pu, r)
-		w.Header().Set("Content-Length", strconv.Itoa(len(encodedBody)))
-		w.WriteHeader(statusCode)
-		w.Write(encodedBody)
-		return
+		return d.reWriteCSS(r, resp, pu)
 	}
 
-	w.WriteHeader(statusCode)
-	w.Write(body)
+	return resp
 }
 
-func staticCacheTime(resp *http.Response) time.Duration {
-	if resp.Header.Get("ETag") != "" &&
-		resp.ContentLength > 0 &&
-		resp.ContentLength < internal.CacheMaxSize {
+func (d *DoProxy) reWriteHTML(r *http.Request, resp *internal.Response, pu *util.ProxyUrl) *internal.Response {
+	urlString := pu.GetUrlStr()
+	body := pu.Extension.Rewrite(resp.Body)
+	if pu.Extension.PreloadingNext() {
+		go preLoader.PreLoad(pu, body, internal.PreLoadTypeNext)
+	} else if pu.Extension.PreloadingSameDir() {
+		go preLoader.PreLoad(pu, body, internal.PreLoadTypeSameDir)
+
+	} else if pu.Extension.Preloading() {
+		go preLoader.PreLoad(pu, body, internal.PreLoadTypeAll)
+	}
+
+	encodedBody := util.HTMLURLReplace(body, urlString, pu, r)
+	encodedBody = util.CSSURLReplace(encodedBody, urlString, pu, r)
+
+	var hBuf bytes.Buffer
+	var needBR bool
+	if pu.Extension.Has("raw_url") {
+		hBuf.WriteString(`<a href="/?`)
+		raw := pu.URLValues().Encode()
+		hBuf.WriteString(raw)
+		hBuf.WriteString(`">`)
+		hBuf.WriteString(urlString)
+		hBuf.WriteString("</a>")
+		needBR = true
+	}
+
+	if pu.Extension.Cache() {
+		hBuf.WriteString(`&nbsp;&nbsp;<a href="?no_cache=1">no_cache</a>`)
+		needBR = true
+	}
+	if needBR {
+		hBuf.WriteString("<br/>\n")
+	}
+
+	hBuf.Write(encodedBody)
+
+	if pu.Extension.Has("ucss") {
+		ru, erru := url.Parse(urlString)
+		var hostName string
+		if erru == nil {
+			hostName = ru.Hostname()
+		}
+		ucss := []string{
+			"/ucss/all.css",
+			"/ucss/" + hostName + ".css",
+		}
+		for _, ufile := range ucss {
+			if hasFile(ufile) {
+				hBuf.WriteString(`<link rel="stylesheet" href="`)
+				hBuf.WriteString(ufile)
+				hBuf.WriteString(`" />`)
+				hBuf.WriteString("\n")
+			}
+		}
+		ujss := []string{
+			"/ucss/jquery.min.js",
+			"/ucss/all.js",
+			"/ucss/" + hostName + ".js",
+		}
+		for _, ufile := range ujss {
+			if hasFile(ufile) {
+				hBuf.WriteString(`<script src="`)
+				hBuf.WriteString(ufile)
+				hBuf.WriteString(`" defer></script>`)
+				hBuf.WriteString("\n")
+			}
+		}
+	}
+
+	resp.Body = hBuf.Bytes()
+	return resp
+}
+
+func (d *DoProxy) reWriteCSS(r *http.Request, resp *internal.Response, pu *util.ProxyUrl) *internal.Response {
+	urlString := pu.GetUrlStr()
+	encodedBody := util.CSSURLReplace(resp.Body, urlString, pu, r)
+	resp.Body = encodedBody
+	return resp
+}
+
+func staticCacheTime(resp *internal.Response) time.Duration {
+	raw := resp.Raw
+	if raw == nil {
+		return 0
+	}
+	if raw.Header.Get("ETag") != "" &&
+		raw.ContentLength > 0 &&
+		raw.ContentLength < internal.CacheMaxSize {
 		return 12 * time.Hour
 	}
 
-	if resp.Header.Get("X-Cache-Status") == "HIT" {
-		return 12 * time.Hour
+	if raw.Header.Get("X-Cache-Status") == "HIT" {
+		return 1 * time.Hour
 	}
 
-	ct := internal.ContentType(resp.Header.Get("Content-Type"))
+	ct := internal.ContentType(raw.Header.Get("Content-Type"))
 	if ct.IsStaticFile() {
 		return 12 * time.Hour
 	}
@@ -212,14 +336,21 @@ func staticCacheTime(resp *http.Response) time.Duration {
 		return time.Hour
 	}
 
-	path := resp.Request.URL.Path
+	path := raw.Request.URL.Path
 	for _, e := range staticExts {
 		if strings.HasSuffix(path, e) {
-			return 6 * time.Hour
+			return 2 * time.Hour
 		}
 	}
-
 	return 0
 }
 
 var staticExts = []string{".png", ".jpg", ".jpeg", ".gif", ".css", ".js"}
+
+func hasFile(name string) bool {
+	info, err := os.Stat("./" + name)
+	if err != nil {
+		return false
+	}
+	return !info.IsDir() && info.Size() > 0
+}

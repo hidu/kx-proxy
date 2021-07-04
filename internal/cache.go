@@ -27,7 +27,7 @@ func (cd *CacheData) ContentType() ContentType {
 var defaultTTL = 30 * 24 * time.Hour
 
 func NewFileCache(dir string) *FileCache {
-	opt := filecache.Option{
+	opt := &filecache.Option{
 		Dir:        dir,
 		GCInterval: time.Minute,
 	}
@@ -41,7 +41,7 @@ func NewFileCache(dir string) *FileCache {
 }
 
 type FileCache struct {
-	cache fscache.ICache
+	cache fscache.Cache
 }
 
 func (fc *FileCache) Get(key string) *CacheData {
