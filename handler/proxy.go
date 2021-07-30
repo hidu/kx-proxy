@@ -48,24 +48,32 @@ func (d *DoProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// 检查url是否过期
 	if pu.IsExpire() {
-		http.Error(w, "expired", http.StatusBadRequest)
+		d.errorPage(pu, w, "expired", http.StatusBadRequest)
 		return
 	}
 
 	if !pu.CheckSign(r) {
-		http.Error(w, "sign not match", http.StatusBadRequest)
+		d.errorPage(pu, w, "sign not match", http.StatusBadRequest)
 		return
 	}
 
 	logData["visit_url"] = urlString
 
 	if r.URL.Query().Get("cache") == "no" {
-		fileCache.Del(urlString)
+		pu.SetCtxParams(util.CtxParamsKeyNoCache, 1)
 	}
 
 	ctx := r.Context()
 	ctx = context.WithValue(ctx, ctxKeyLogData, logData)
+
 	d.do(ctx, w, r, pu)
+}
+
+func (d *DoProxy) errorPage(pu *util.ProxyUrl, w http.ResponseWriter, error string, code int) {
+	var bf bytes.Buffer
+	bf.Write(pu.HeadHTML())
+	bf.WriteString(error)
+	http.Error(w, bf.String(), code)
 }
 
 type ctxKeyType uint8
@@ -84,7 +92,7 @@ func (d *DoProxy) do(ctx context.Context, w http.ResponseWriter, r *http.Request
 
 	var resp *internal.Response
 
-	if pu.Extension.Cache() && !pu.Extension.NoCache() {
+	if pu.CacheAble() {
 		resp = d.fromCache(urlString)
 	}
 
@@ -97,7 +105,7 @@ func (d *DoProxy) do(ctx context.Context, w http.ResponseWriter, r *http.Request
 		resp, err = d.directGet(r, pu)
 		if err != nil {
 			logData["emsg"] = "fetch_failed:" + err.Error()
-			http.Error(w, "Error Fetching "+urlString+"\n"+err.Error(), http.StatusBadGateway)
+			d.errorPage(pu, w, "Error Fetching "+urlString+"\n"+err.Error(), http.StatusBadGateway)
 			return
 		}
 	}
@@ -106,8 +114,8 @@ func (d *DoProxy) do(ctx context.Context, w http.ResponseWriter, r *http.Request
 
 	rg, err := d.redirect(resp, pu)
 	if err != nil {
-		logData["emsg"] = "rediect_failed:" + err.Error()
-		http.Error(w, "Error Redirect "+urlString+"\n"+err.Error(), http.StatusBadGateway)
+		logData["emsg"] = "redirect_failed:" + err.Error()
+		d.errorPage(pu, w, "Error Redirect "+urlString+"\n"+err.Error(), http.StatusBadGateway)
 		return
 	}
 
@@ -117,9 +125,7 @@ func (d *DoProxy) do(ctx context.Context, w http.ResponseWriter, r *http.Request
 	}
 
 	// 是否允许 cache
-	canCache := pu.Extension.Cache() && !fromCache && resp.ContentType.CanCache()
-
-	canCache = canCache && r.URL.Query().Get("no_cache") == ""
+	canCache := pu.CacheAble() && !fromCache && resp.ContentType.CanCache()
 
 	logData["canCache"] = canCache
 
@@ -247,25 +253,10 @@ func (d *DoProxy) reWriteHTML(r *http.Request, resp *internal.Response, pu *util
 	encodedBody = util.CSSURLReplace(encodedBody, urlString, pu, r)
 
 	var hBuf bytes.Buffer
-	var needBR bool
-	if pu.Extension.Has("raw_url") {
-		hBuf.WriteString(`<a href="/?`)
-		raw := pu.URLValues().Encode()
-		hBuf.WriteString(raw)
-		hBuf.WriteString(`">`)
-		hBuf.WriteString(urlString)
-		hBuf.WriteString("</a>")
-		needBR = true
+	hdCode := pu.HeadHTML()
+	if len(hdCode) > 0 {
+		hBuf.Write(hdCode)
 	}
-
-	if pu.Extension.Cache() {
-		hBuf.WriteString(`&nbsp;&nbsp;<a href="?no_cache=1">no_cache</a>`)
-		needBR = true
-	}
-	if needBR {
-		hBuf.WriteString("<br/>\n")
-	}
-
 	hBuf.Write(encodedBody)
 
 	if pu.Extension.Has("ucss") {

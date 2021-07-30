@@ -24,6 +24,7 @@ cache/*
 *.prof
 .*.md.html
 
+kx-proxy
 Godeps
 keys.txt
 Procfile

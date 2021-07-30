@@ -20,6 +20,8 @@ type ProxyUrl struct {
 	Sign      int64      `json:"s"`
 	Extension Extensions `json:"x"`
 	Ref       string     `json:"r"`
+
+	ctxParams map[interface{}]interface{}
 }
 
 type Extensions []string
@@ -102,6 +104,24 @@ func NewProxyUrl(urlStr string, old *ProxyUrl, r *http.Request) *ProxyUrl {
 	return pu
 }
 
+const (
+	CtxParamsKeyNoCache = "no_cache"
+)
+
+func (p *ProxyUrl) SetCtxParams(key interface{}, val interface{}) {
+	if p.ctxParams == nil {
+		p.ctxParams = make(map[interface{}]interface{}, 1)
+	}
+	p.ctxParams[key] = val
+}
+
+func (p *ProxyUrl) GetCtxParams(key interface{}) interface{} {
+	if p.ctxParams == nil {
+		return nil
+	}
+	return p.ctxParams[key]
+}
+
 func (p *ProxyUrl) checkExpireAt() {
 	if p.Expire > 0 {
 		p.ExpireAt = time.Now().Unix() + p.Expire
@@ -177,6 +197,35 @@ func (p *ProxyUrl) URLValues() url.Values {
 	vs.Add("expire", strconv.FormatInt(p.Expire, 10))
 	vs.Add("ext", strings.Join(p.Extension, ","))
 	return vs
+}
+
+func (p *ProxyUrl) CacheAble() bool {
+	if val := p.GetCtxParams(CtxParamsKeyNoCache); val != nil {
+		return false
+	}
+	return p.Extension.Cache() && !p.Extension.NoCache()
+}
+
+func (p *ProxyUrl) HeadHTML() []byte {
+	var bf bytes.Buffer
+	if p.Extension.Has("raw_url") {
+		bf.WriteString(`<a href="/?`)
+		raw := p.URLValues().Encode()
+		bf.WriteString(raw)
+		bf.WriteString(`">`)
+		bf.WriteString(p.GetUrlStr())
+		bf.WriteString("</a>")
+	}
+
+	if p.Extension.Cache() {
+		bf.WriteString(`&nbsp;&nbsp;<a href="?cache=no">no_cache</a>`)
+	}
+
+	if bf.Len() > 0 {
+		bf.WriteString("<br/>\n")
+	}
+
+	return bf.Bytes()
 }
 
 func DecodeProxyUrl(encodedURL string) (p *ProxyUrl, err error) {
