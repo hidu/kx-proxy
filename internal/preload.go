@@ -11,9 +11,8 @@ import (
 	"log"
 	"net/http"
 	"strings"
-	"time"
 
-	"github.com/hidu/kx-proxy/util"
+	"github.com/hidu/kx-proxy/internal/links"
 )
 
 const (
@@ -53,13 +52,9 @@ func (rc *PreLoad) filterURLS(cacheType string, urlNow string, urls []string) []
 
 var ua = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36"
 
-var Client = &http.Client{
-	Timeout: 30 * time.Second,
-}
-
 const CacheMaxSize = 1024 * 1024
 
-func (rc *PreLoad) Fetch(pu *util.ProxyUrl, preloadURL string) {
+func (rc *PreLoad) Fetch(pu *links.ProxyURL, preloadURL string) {
 	logData := map[string]interface{}{
 		"loaded": false,
 	}
@@ -125,17 +120,17 @@ func (rc *PreLoad) Fetch(pu *util.ProxyUrl, preloadURL string) {
 	logData["loaded"] = true
 }
 
-func (rc *PreLoad) PreLoad(pu *util.ProxyUrl, body []byte, cacheType string) {
+func (rc *PreLoad) PreLoad(pu *links.ProxyURL, body []byte, cacheType string) {
 	defer func() {
 		if re := recover(); re != nil {
 			log.Printf("CacheAll panic:%v \n", re)
 		}
 	}()
 
-	urlNow := pu.GetUrlStr()
+	urlNow := pu.GetURLStr()
 
-	baseHref := util.BaseHref(body)
-	urls := util.AllLinks(body, baseHref, urlNow)
+	baseHref := links.BaseHref(body)
+	urls := links.AllLinks(body, baseHref, urlNow)
 
 	urls = rc.filterURLS(cacheType, urlNow, urls)
 

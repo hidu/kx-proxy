@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/hidu/kx-proxy/util"
+	"github.com/hidu/kx-proxy/internal/links"
 )
 
 // 404
@@ -28,7 +28,7 @@ func (k *KxProxy) handler404(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pu, err := util.DecodeProxyUrl(u.Path[3:])
+	pu, err := links.DecodeProxyURL(u.Path[3:])
 	if err != nil {
 		http.NotFound(w, r)
 		return

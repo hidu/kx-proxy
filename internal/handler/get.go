@@ -6,7 +6,6 @@ import (
 	"strings"
 )
 
-//
 // handle url http://aaa.com/get/?url=http://www.baidu.com/
 func (k *KxProxy) handlerGet(w http.ResponseWriter, r *http.Request) {
 	cusURL := ""
@@ -28,7 +27,6 @@ func (k *KxProxy) handlerGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer resp.Body.Close()
-	copyHeader(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
 	io.Copy(w, resp.Body)
 }

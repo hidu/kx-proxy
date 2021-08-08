@@ -2,7 +2,7 @@
 // Author: fsgo
 // Date: 2021/6/27
 
-package util
+package links
 
 import (
 	"reflect"

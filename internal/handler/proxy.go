@@ -3,17 +3,17 @@ package handler
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/hidu/kx-proxy/internal"
-	"github.com/hidu/kx-proxy/util"
+	"github.com/hidu/kx-proxy/internal/links"
 )
 
 var doProxy = &DoProxy{}
@@ -31,20 +31,20 @@ func (d *DoProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	logData := make(internal.LogData)
 	reqStart := time.Now()
 	defer func() {
-		used := time.Now().Sub(reqStart)
+		used := time.Since(reqStart)
 		log.Println("remote:", r.RemoteAddr, "path:", r.URL.Path, "used:", used, logData)
 	}()
 
 	r.Header.Del("Connection")
 	encodedURL := r.URL.Path[len("/p/"):]
 
-	pu, err := util.DecodeProxyUrl(encodedURL)
+	pu, err := links.DecodeProxyURL(encodedURL)
 	if err != nil {
 		logData["emsg"] = "decode_url_failed:" + err.Error()
 		http.Error(w, "decode_url_failed:"+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	urlString := pu.GetUrlStr()
+	urlString := pu.GetURLStr()
 
 	// 检查url是否过期
 	if pu.IsExpire() {
@@ -60,7 +60,7 @@ func (d *DoProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	logData["visit_url"] = urlString
 
 	if r.URL.Query().Get("cache") == "no" {
-		pu.SetCtxParams(util.CtxParamsKeyNoCache, 1)
+		pu.SetNoCache()
 	}
 
 	ctx := r.Context()
@@ -69,11 +69,22 @@ func (d *DoProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	d.do(ctx, w, r, pu)
 }
 
-func (d *DoProxy) errorPage(pu *util.ProxyUrl, w http.ResponseWriter, error string, code int) {
+func (d *DoProxy) errorPage(pu *links.ProxyURL, w http.ResponseWriter, error string, code int) {
 	var bf bytes.Buffer
+	bf.WriteString(`<html>
+<head>
+	<title>Error</title>
+</head>
+<body>
+`)
 	bf.Write(pu.HeadHTML())
 	bf.WriteString(error)
-	http.Error(w, bf.String(), code)
+	bf.WriteString("\n</body></html>")
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(code)
+	fmt.Fprintln(w, bf.String())
 }
 
 type ctxKeyType uint8
@@ -86,8 +97,8 @@ func getLogData(ctx context.Context) internal.LogData {
 	return ctx.Value(ctxKeyLogData).(internal.LogData)
 }
 
-func (d *DoProxy) do(ctx context.Context, w http.ResponseWriter, r *http.Request, pu *util.ProxyUrl) {
-	urlString := pu.GetUrlStr()
+func (d *DoProxy) do(ctx context.Context, w http.ResponseWriter, r *http.Request, pu *links.ProxyURL) {
+	urlString := pu.GetURLStr()
 	logData := getLogData(ctx)
 
 	var resp *internal.Response
@@ -127,6 +138,16 @@ func (d *DoProxy) do(ctx context.Context, w http.ResponseWriter, r *http.Request
 	// 是否允许 cache
 	canCache := pu.CacheAble() && !fromCache && resp.ContentType.CanCache()
 
+	if canCache {
+		if resp.StatusCode == 200 {
+			// canCache
+		} else if resp.StatusCode == 404 && pu.IsStaticURL() {
+			// canCache
+		} else {
+			canCache = false
+		}
+	}
+
 	logData["canCache"] = canCache
 
 	if canCache {
@@ -154,8 +175,8 @@ func (d *DoProxy) fromCache(urlString string) *internal.Response {
 	return nil
 }
 
-func (d *DoProxy) directGet(r *http.Request, pu *util.ProxyUrl) (*internal.Response, error) {
-	urlString := pu.GetUrlStr()
+func (d *DoProxy) directGet(r *http.Request, pu *links.ProxyURL) (*internal.Response, error) {
+	urlString := pu.GetURLStr()
 	req, err := http.NewRequestWithContext(r.Context(), r.Method, urlString, r.Body)
 	if err != nil {
 		return nil, err
@@ -167,7 +188,8 @@ func (d *DoProxy) directGet(r *http.Request, pu *util.ProxyUrl) (*internal.Respo
 		return nil, err1
 	}
 	contentType := internal.ContentType(resp.Header.Get("Content-Type"))
-	if contentType.IsText() {
+
+	if contentType.CanCache() {
 		defer resp.Body.Close()
 		body, err2 := ioutil.ReadAll(io.LimitReader(resp.Body, internal.CacheMaxSize))
 		if err2 != nil {
@@ -190,11 +212,11 @@ func (d *DoProxy) directGet(r *http.Request, pu *util.ProxyUrl) (*internal.Respo
 	}, nil
 }
 
-func (d *DoProxy) redirect(resp *internal.Response, pu *util.ProxyUrl) (string, error) {
+func (d *DoProxy) redirect(resp *internal.Response, pu *links.ProxyURL) (string, error) {
 	if resp.StatusCode == http.StatusMovedPermanently || resp.StatusCode == http.StatusFound {
 		location := resp.Header.Get("Location")
 		if location != "" {
-			pu.SwitchUrl(location)
+			pu.SwitchURL(location)
 			encodedURL, err := pu.Encode()
 			if err != nil {
 				return "", err
@@ -205,25 +227,35 @@ func (d *DoProxy) redirect(resp *internal.Response, pu *util.ProxyUrl) (string, 
 	return "", nil
 }
 
-func (d *DoProxy) trySetCache(pu *util.ProxyUrl, resp *internal.Response) bool {
+func (d *DoProxy) trySetCache(pu *links.ProxyURL, resp *internal.Response) bool {
 	life := staticCacheTime(resp)
 	if life <= 0 {
 		return false
 	}
+
 	if len(resp.Body) == 0 {
 		return false
 	}
+
 	ncd := &internal.CacheData{
 		Header: map[string]string{
 			"Content-Type": string(resp.ContentType),
 		},
 		Body: resp.Body,
 	}
-	fileCache.SetWithTTL(pu.GetUrlStr(), ncd, life)
+
+	// 404 资源可以cache，但是特殊对待
+	if resp.StatusCode == 404 {
+		if life > time.Hour {
+			life = time.Hour
+		}
+	}
+
+	fileCache.SetWithTTL(pu.GetURLStr(), ncd, life)
 	return true
 }
 
-func (d *DoProxy) reWriteResp(r *http.Request, resp *internal.Response, pu *util.ProxyUrl) *internal.Response {
+func (d *DoProxy) reWriteResp(r *http.Request, resp *internal.Response, pu *links.ProxyURL) *internal.Response {
 	contentType := resp.ContentType
 
 	if contentType.IsHTML() {
@@ -237,8 +269,8 @@ func (d *DoProxy) reWriteResp(r *http.Request, resp *internal.Response, pu *util
 	return resp
 }
 
-func (d *DoProxy) reWriteHTML(r *http.Request, resp *internal.Response, pu *util.ProxyUrl) *internal.Response {
-	urlString := pu.GetUrlStr()
+func (d *DoProxy) reWriteHTML(r *http.Request, resp *internal.Response, pu *links.ProxyURL) *internal.Response {
+	urlString := pu.GetURLStr()
 	body := pu.Extension.Rewrite(resp.Body)
 	if pu.Extension.PreloadingNext() {
 		go preLoader.PreLoad(pu, body, internal.PreLoadTypeNext)
@@ -249,8 +281,8 @@ func (d *DoProxy) reWriteHTML(r *http.Request, resp *internal.Response, pu *util
 		go preLoader.PreLoad(pu, body, internal.PreLoadTypeAll)
 	}
 
-	encodedBody := util.HTMLURLReplace(body, urlString, pu, r)
-	encodedBody = util.CSSURLReplace(encodedBody, urlString, pu, r)
+	encodedBody := links.HTMLURLReplace(body, urlString, pu, r)
+	encodedBody = links.CSSURLReplace(encodedBody, urlString, pu, r)
 
 	var hBuf bytes.Buffer
 	hdCode := pu.HeadHTML()
@@ -296,9 +328,9 @@ func (d *DoProxy) reWriteHTML(r *http.Request, resp *internal.Response, pu *util
 	return resp
 }
 
-func (d *DoProxy) reWriteCSS(r *http.Request, resp *internal.Response, pu *util.ProxyUrl) *internal.Response {
-	urlString := pu.GetUrlStr()
-	encodedBody := util.CSSURLReplace(resp.Body, urlString, pu, r)
+func (d *DoProxy) reWriteCSS(r *http.Request, resp *internal.Response, pu *links.ProxyURL) *internal.Response {
+	urlString := pu.GetURLStr()
+	encodedBody := links.CSSURLReplace(resp.Body, urlString, pu, r)
 	resp.Body = encodedBody
 	return resp
 }
@@ -315,7 +347,7 @@ func staticCacheTime(resp *internal.Response) time.Duration {
 	}
 
 	if raw.Header.Get("X-Cache-Status") == "HIT" {
-		return 1 * time.Hour
+		return time.Hour
 	}
 
 	ct := internal.ContentType(raw.Header.Get("Content-Type"))
@@ -327,16 +359,11 @@ func staticCacheTime(resp *internal.Response) time.Duration {
 		return time.Hour
 	}
 
-	path := raw.Request.URL.Path
-	for _, e := range staticExts {
-		if strings.HasSuffix(path, e) {
-			return 2 * time.Hour
-		}
+	if links.IsStaticPath(raw.Request.URL.Path) {
+		return 12 * time.Hour
 	}
 	return 0
 }
-
-var staticExts = []string{".png", ".jpg", ".jpeg", ".gif", ".css", ".js"}
 
 func hasFile(name string) bool {
 	info, err := os.Stat("./" + name)

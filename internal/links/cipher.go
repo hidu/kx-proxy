@@ -1,4 +1,4 @@
-package util
+package links
 
 import (
 	"crypto/aes"
@@ -15,9 +15,7 @@ const (
 	aesTable = "kxproxyb8PsyCQ4b"
 )
 
-var (
-	aesBlock cipher.Block
-)
+var aesBlock cipher.Block
 
 func init() {
 	var err error
@@ -25,7 +23,6 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
-
 }
 
 // CipherStreamWrite 对数据流进行加密
@@ -114,11 +111,8 @@ func DecryptURL(srcURL string) (string, error) {
 	paddingLen := int(decryptText[srcLen-1])
 
 	if paddingLen > 16 {
-
 		return "", fmt.Errorf("wrong pading size")
-
 	}
 
 	return string(decryptText[:srcLen-paddingLen]), nil
-
 }

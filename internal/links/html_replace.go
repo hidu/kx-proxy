@@ -1,4 +1,4 @@
-package util
+package links
 
 import (
 	"bytes"
@@ -12,7 +12,7 @@ var reBase = regexp.MustCompile("base +href=\"(.*?)\"")
 var reHTML = regexp.MustCompile("src=[\"\\'](.*?)[\"\\']|href=[\"\\'](.*?)[\"\\']|action=[\"\\'](.*?)[\"\\']")
 var reCSS = regexp.MustCompile("url\\([\"\\']?(.*?)[\"\\']?\\)")
 
-func encodeURL(src []byte, baseHref string, urlString string, start int, end int, pu *ProxyUrl, r *http.Request) []byte {
+func encodeURL(src []byte, baseHref string, urlString string, start int, end int, pu *ProxyURL, r *http.Request) []byte {
 	relURL := string(src[start:end])
 	// keep anchor and javascript links intact
 	if strings.Index(relURL, "#") == 0 || strings.Index(relURL, "javascript") == 0 {
@@ -50,7 +50,7 @@ func encodeURL(src []byte, baseHref string, urlString string, start int, end int
 	}
 	urlStrNew := string(src[start:end])
 
-	puNew := NewProxyUrl(urlStrNew, pu, r)
+	puNew := NewProxyURL(urlStrNew, pu, r)
 
 	newURL, _ := puNew.Encode()
 
@@ -67,7 +67,7 @@ func BaseHref(body []byte) string {
 }
 
 // HTMLURLReplace 对html内容中的url替换 成代理的url地址
-func HTMLURLReplace(body []byte, urlString string, pu *ProxyUrl, r *http.Request) []byte {
+func HTMLURLReplace(body []byte, urlString string, pu *ProxyURL, r *http.Request) []byte {
 	baseHref := BaseHref(body)
 	return reHTML.ReplaceAllFunc(body, func(s []byte) []byte {
 		parts := reHTML.FindSubmatchIndex(s)
@@ -95,7 +95,7 @@ func HTMLURLReplace(body []byte, urlString string, pu *ProxyUrl, r *http.Request
 }
 
 // CSSURLReplace 对css内容中的url替换为代理的地址
-func CSSURLReplace(body []byte, urlString string, pu *ProxyUrl, r *http.Request) []byte {
+func CSSURLReplace(body []byte, urlString string, pu *ProxyURL, r *http.Request) []byte {
 	baseHref := ""
 	return reCSS.ReplaceAllFunc(body, func(s []byte) []byte {
 		parts := reCSS.FindSubmatchIndex(s)

@@ -5,7 +5,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/hidu/kx-proxy/handler"
+	"github.com/hidu/kx-proxy/internal/handler"
 )
 
 var addr = flag.String("addr", ":8085", "listen addr,eg :8085")
@@ -17,7 +17,7 @@ func main() {
 	handler.InitCache(*cd)
 	log.Println("kx-proxy listening on :", *addr)
 
-	proxy := handler.New()
+	proxy := handler.NewKxProxy()
 	err := http.ListenAndServe(*addr, proxy)
 
 	log.Println("kx-proxy exit:", err)
