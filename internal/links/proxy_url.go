@@ -108,7 +108,7 @@ func (p *ProxyURL) Encode() (string, error) {
 
 	encodedURL, err := EncryptURL(string(bf))
 	if err != nil {
-		return "", fmt.Errorf("build url failed:%s", err.Error())
+		return "", fmt.Errorf("build url failed: %w", err)
 	}
 	return fmt.Sprintf("%s%c", encodedURL, _URLStopChar), nil
 }
@@ -140,22 +140,37 @@ func (p *ProxyURL) CacheAble() bool {
 	if val := p.GetCtxParams(ctxParamsKeyNoCache); val != nil {
 		return false
 	}
-	return p.Extension.Cache() && !p.Extension.NoCache()
+
+	if p.Extension.NoCache() {
+		return false
+	}
+	if p.Extension.Cache() {
+		return true
+	}
+	if p.IsStaticURL() && p.Extension.CacheStatic() {
+		return true
+	}
+	return false
 }
 
 func (p *ProxyURL) HeadHTML() []byte {
 	var bf bytes.Buffer
 	if p.Extension.Has("raw_url") {
-		bf.WriteString(`<a href="/?`)
+		bf.WriteString(`<input style='border:none' readonly type='text' value="`)
+		bf.WriteString(p.GetURLStr())
+		bf.WriteString(`">`)
+
+		bf.WriteString(`&nbsp;<a class='raw_url' href="/?`)
 		raw := p.URLValues().Encode()
 		bf.WriteString(raw)
 		bf.WriteString(`">`)
-		bf.WriteString(p.GetURLStr())
+		bf.WriteString("Home")
 		bf.WriteString("</a>")
+
 	}
 
 	if p.Extension.Cache() {
-		bf.WriteString(`&nbsp;&nbsp;<a href="?cache=no">no_cache</a>`)
+		bf.WriteString(`&nbsp;<a href="?cache=no">NoCache</a>`)
 	}
 
 	if bf.Len() > 0 {
@@ -167,6 +182,13 @@ func (p *ProxyURL) HeadHTML() []byte {
 
 func (p *ProxyURL) IsStaticURL() bool {
 	return IsStaticPath(p.URLStr)
+}
+func (p *ProxyURL) Hostname() string {
+	ru, erru := url.Parse(p.URLStr)
+	if erru == nil {
+		return ru.Hostname()
+	}
+	panic(erru)
 }
 
 func DecodeProxyURL(encodedURL string) (p *ProxyURL, err error) {
@@ -235,6 +257,11 @@ func (es Extensions) PreloadingNext() bool {
 func (es Extensions) Cache() bool {
 	return es.Has("cache")
 }
+
+func (es Extensions) CacheStatic() bool {
+	return es.Has("cache_static")
+}
+
 func (es Extensions) NoCache() bool {
 	return es.Has("no_cache")
 }

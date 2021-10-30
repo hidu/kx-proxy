@@ -45,6 +45,33 @@ func init() {
 	)
 	metrics.DefaultReg.MustRegister(dialSum)
 
+	readBytesCounter := prometheus.NewCounter(prometheus.CounterOpts{
+		Namespace: "net",
+		Name:      "conn_read_bytes",
+	})
+	metrics.DefaultReg.MustRegister(readBytesCounter)
+
+	writeBytesCounter := prometheus.NewCounter(prometheus.CounterOpts{
+		Namespace: "net",
+		Name:      "conn_write_bytes",
+	})
+	metrics.DefaultReg.MustRegister(writeBytesCounter)
+
+	stHook := &fsnet.ConnHook{
+		Read: func(b []byte, raw func([]byte) (int, error)) (n int, err error) {
+			defer func() {
+				readBytesCounter.Add(float64(n))
+			}()
+			return raw(b)
+		},
+		Write: func(b []byte, raw func([]byte) (int, error)) (n int, err error) {
+			defer func() {
+				writeBytesCounter.Add(float64(n))
+			}()
+			return raw(b)
+		},
+	}
+
 	hk := &fsnet.DialerHook{
 		DialContext: func(ctx context.Context, network string, address string, fn fsnet.DialContextFunc) (conn net.Conn, err error) {
 			tm := prometheus.NewTimer(prometheus.ObserverFunc(func(v float64) {
@@ -54,8 +81,14 @@ func init() {
 					dialSum.WithLabelValues("fail").Observe(v)
 				}
 			}))
-			defer tm.ObserveDuration()
-			return fn(ctx, network, address)
+
+			conn, err = fn(ctx, network, address)
+
+			tm.ObserveDuration()
+			if err != nil {
+				return nil, err
+			}
+			return fsnet.NewConn(conn, stHook), nil
 		},
 	}
 	fsnet.MustRegisterDialerHook(hk)

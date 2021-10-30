@@ -3,13 +3,14 @@ package handler
 import (
 	"bytes"
 	"context"
+	"crypto/md5"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/hidu/kx-proxy/internal"
@@ -136,7 +137,7 @@ func (d *DoProxy) do(ctx context.Context, w http.ResponseWriter, r *http.Request
 	}
 
 	// 是否允许 cache
-	canCache := pu.CacheAble() && !fromCache && resp.ContentType.CanCache()
+	canCache := pu.CacheAble() && resp.ContentType.CanCache()
 
 	if canCache {
 		if resp.StatusCode == 200 {
@@ -150,14 +151,21 @@ func (d *DoProxy) do(ctx context.Context, w http.ResponseWriter, r *http.Request
 
 	logData["canCache"] = canCache
 
-	if canCache {
+	if canCache && !fromCache {
 		cached := d.trySetCache(pu, resp)
 		logData["save_cache"] = cached
 	}
 
-	d.reWriteResp(r, resp, pu)
+	inm := r.Header.Get("If-None-Match")
 
-	wrote, err := resp.WriteTo(w)
+	var wrote int64
+	if inm != "" && inm == resp.HeaderGet("Etag") {
+		w.WriteHeader(304)
+	} else {
+		d.reWriteResp(r, resp, pu)
+		wrote, err = resp.WriteTo(w)
+	}
+
 	logData["resp_wrote_size"] = wrote
 	logData["resp_wrote_err"] = err
 }
@@ -240,6 +248,7 @@ func (d *DoProxy) trySetCache(pu *links.ProxyURL, resp *internal.Response) bool 
 	ncd := &internal.CacheData{
 		Header: map[string]string{
 			"Content-Type": string(resp.ContentType),
+			"Etag":         `"` + fmt.Sprintf("%x", md5.Sum(resp.Body)) + `"`,
 		},
 		Body: resp.Body,
 	}
@@ -289,43 +298,67 @@ func (d *DoProxy) reWriteHTML(r *http.Request, resp *internal.Response, pu *link
 	if len(hdCode) > 0 {
 		hBuf.Write(hdCode)
 	}
+
+	ucss := d.userCss(pu)
+	hBuf.WriteString(ucss)
+
+	if ujs := d.userJS(pu); len(ujs) > 0 {
+		hBuf.WriteString(ujs)
+	}
+
 	hBuf.Write(encodedBody)
 
-	if pu.Extension.Has("ucss") {
-		ru, erru := url.Parse(urlString)
-		var hostName string
-		if erru == nil {
-			hostName = ru.Hostname()
-		}
-		ucss := []string{
-			"/ucss/all.css",
-			"/ucss/" + hostName + ".css",
-		}
-		for _, ufile := range ucss {
-			if hasFile(ufile) {
-				hBuf.WriteString(`<link rel="stylesheet" href="`)
-				hBuf.WriteString(ufile)
-				hBuf.WriteString(`" />`)
-				hBuf.WriteString("\n")
-			}
-		}
-		ujss := []string{
-			"/ucss/jquery.min.js",
-			"/ucss/all.js",
-			"/ucss/" + hostName + ".js",
-		}
-		for _, ufile := range ujss {
-			if hasFile(ufile) {
-				hBuf.WriteString(`<script src="`)
-				hBuf.WriteString(ufile)
-				hBuf.WriteString(`" defer></script>`)
-				hBuf.WriteString("\n")
-			}
-		}
-	}
+	hBuf.WriteString(ucss)
 
 	resp.Body = hBuf.Bytes()
 	return resp
+}
+
+func (d *DoProxy) userCss(pu *links.ProxyURL) string {
+	if !pu.Extension.Has("ucss") {
+		return ""
+	}
+	hostName := pu.Hostname()
+	ucss := []string{
+		"/ucss/all.css",
+		"/ucss/" + hostName + ".css",
+	}
+	var buf strings.Builder
+	for _, ufile := range ucss {
+		if t := hasFile(ufile); t != "" {
+			buf.WriteString(`<link rel="stylesheet" href="`)
+			buf.WriteString(ufile)
+			buf.WriteString("?")
+			buf.WriteString(t)
+			buf.WriteString(`" />`)
+			buf.WriteString("\n")
+		}
+	}
+	return buf.String()
+}
+
+func (d *DoProxy) userJS(pu *links.ProxyURL) string {
+	if !pu.Extension.Has("ucss") {
+		return ""
+	}
+	hostName := pu.Hostname()
+	ujss := []string{
+		"/ucss/jquery.min.js",
+		"/ucss/all.js",
+		"/ucss/" + hostName + ".js",
+	}
+	var buf strings.Builder
+	for _, ufile := range ujss {
+		if t := hasFile(ufile); t != "" {
+			buf.WriteString(`<script src="`)
+			buf.WriteString(ufile)
+			buf.WriteString("?")
+			buf.WriteString(t)
+			buf.WriteString(`" defer></script>`)
+			buf.WriteString("\n")
+		}
+	}
+	return buf.String()
 }
 
 func (d *DoProxy) reWriteCSS(r *http.Request, resp *internal.Response, pu *links.ProxyURL) *internal.Response {
@@ -355,20 +388,19 @@ func staticCacheTime(resp *internal.Response) time.Duration {
 		return 12 * time.Hour
 	}
 
-	if ct.IsCss() {
-		return time.Hour
-	}
-
 	if links.IsStaticPath(raw.Request.URL.Path) {
 		return 12 * time.Hour
 	}
 	return 0
 }
 
-func hasFile(name string) bool {
+func hasFile(name string) string {
 	info, err := os.Stat("./" + name)
 	if err != nil {
-		return false
+		return ""
 	}
-	return !info.IsDir() && info.Size() > 0
+	if info.IsDir() || info.Size() == 0 {
+		return ""
+	}
+	return info.ModTime().Format("02150405")
 }

@@ -28,3 +28,5 @@ kx-proxy
 Godeps
 keys.txt
 Procfile
+log/
+ucss/
