@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -64,7 +65,8 @@ func (d *DoProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		pu.SetNoCache()
 	}
 
-	ctx := r.Context()
+	ctx, cancel := pu.Context(r.Context())
+	defer cancel()
 	ctx = context.WithValue(ctx, ctxKeyLogData, logData)
 
 	d.do(ctx, w, r, pu)
@@ -74,16 +76,17 @@ func (d *DoProxy) errorPage(pu *links.ProxyURL, w http.ResponseWriter, error str
 	var bf bytes.Buffer
 	bf.WriteString(`<html>
 <head>
-	<title>Error</title>
+	<title>Error ` + strconv.Itoa(code) + `</title>
 </head>
 <body>
 `)
 	bf.Write(pu.HeadHTML())
 	bf.WriteString(error)
-	bf.WriteString("\n</body></html>")
+	bf.WriteString("\n</body>\n</html>")
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+	code = 200 // 部分浏览器非 200 状态不展现页面内容
 	w.WriteHeader(code)
 	fmt.Fprintln(w, bf.String())
 }
@@ -114,7 +117,7 @@ func (d *DoProxy) do(ctx context.Context, w http.ResponseWriter, r *http.Request
 
 	if resp == nil {
 		var err error
-		resp, err = d.directGet(r, pu)
+		resp, err = d.directGet(ctx, r, pu)
 		if err != nil {
 			logData["emsg"] = "fetch_failed:" + err.Error()
 			d.errorPage(pu, w, "Error Fetching "+urlString+"\n"+err.Error(), http.StatusBadGateway)
@@ -183,9 +186,9 @@ func (d *DoProxy) fromCache(urlString string) *internal.Response {
 	return nil
 }
 
-func (d *DoProxy) directGet(r *http.Request, pu *links.ProxyURL) (*internal.Response, error) {
+func (d *DoProxy) directGet(ctx context.Context, r *http.Request, pu *links.ProxyURL) (*internal.Response, error) {
 	urlString := pu.GetURLStr()
-	req, err := http.NewRequestWithContext(r.Context(), r.Method, urlString, r.Body)
+	req, err := http.NewRequestWithContext(ctx, r.Method, urlString, r.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -271,7 +274,7 @@ func (d *DoProxy) reWriteResp(r *http.Request, resp *internal.Response, pu *link
 		return d.reWriteHTML(r, resp, pu)
 	}
 
-	if contentType.IsCss() {
+	if contentType.IsCSS() {
 		return d.reWriteCSS(r, resp, pu)
 	}
 
@@ -299,7 +302,7 @@ func (d *DoProxy) reWriteHTML(r *http.Request, resp *internal.Response, pu *link
 		hBuf.Write(hdCode)
 	}
 
-	ucss := d.userCss(pu)
+	ucss := d.userCSS(pu)
 	hBuf.WriteString(ucss)
 
 	if ujs := d.userJS(pu); len(ujs) > 0 {
@@ -314,7 +317,7 @@ func (d *DoProxy) reWriteHTML(r *http.Request, resp *internal.Response, pu *link
 	return resp
 }
 
-func (d *DoProxy) userCss(pu *links.ProxyURL) string {
+func (d *DoProxy) userCSS(pu *links.ProxyURL) string {
 	if !pu.Extension.Has("ucss") {
 		return ""
 	}

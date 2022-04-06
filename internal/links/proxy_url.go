@@ -2,6 +2,7 @@ package links
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -153,6 +154,15 @@ func (p *ProxyURL) CacheAble() bool {
 	return false
 }
 
+func emptyFunc() {}
+
+func (p *ProxyURL) Context(ctx context.Context) (context.Context, context.CancelFunc) {
+	if tl := p.Extension.Timeout(); tl > 0 {
+		return context.WithTimeout(ctx, tl)
+	}
+	return ctx, emptyFunc
+}
+
 func (p *ProxyURL) HeadHTML() []byte {
 	var bf bytes.Buffer
 	if p.Extension.Has("raw_url") {
@@ -264,6 +274,19 @@ func (es Extensions) CacheStatic() bool {
 
 func (es Extensions) NoCache() bool {
 	return es.Has("no_cache")
+}
+
+func (es Extensions) Timeout() time.Duration {
+	if es.Has("tl_30") {
+		return 30 * time.Second
+	}
+	if es.Has("tl_10") {
+		return 10 * time.Second
+	}
+	if es.Has("tl_5") {
+		return 5 * time.Second
+	}
+	return 0
 }
 
 var noJSReg = regexp.MustCompile(`(?is)<script.+?<\s*/\s*script>`)

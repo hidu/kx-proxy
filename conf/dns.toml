@@ -1,0 +1,20 @@
+# 一次 DNS 查询的总超时时间，可选，默认为 500
+Timeout = 1000
+
+# 是否禁用下列的 NameServer 配置
+#Disable = false
+
+[[NameServer]]
+Name = "Default"
+Hosts = ["1.1.1.1"]
+# 超时时间，可选，默认为 200
+Timeout = 500
+# 哪些域名使用这组 NS 解析，可选，
+# 未匹配的 NS 组将作为 backup,在前面的 NS 查询失败时使用
+# 支持使用 * 通配符，可以配置：*.cn、www.example
+Domains = []
+
+[[NameServer]]
+Name = "114"
+Hosts = ["114.114.114.114"]
+Domains = ["*.cn"]

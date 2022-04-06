@@ -15,7 +15,7 @@ func (k *KxProxy) handlerGet(w http.ResponseWriter, r *http.Request) {
 	req, err := http.NewRequest(r.Method, cusURL, r.Body)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(err.Error()))
+		_, _ = w.Write([]byte(err.Error()))
 		return
 	}
 	addrInfo := strings.Split(r.RemoteAddr, ":")
@@ -23,10 +23,10 @@ func (k *KxProxy) handlerGet(w http.ResponseWriter, r *http.Request) {
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		w.WriteHeader(http.StatusBadGateway)
-		w.Write([]byte(err.Error()))
+		_, _ = w.Write([]byte(err.Error()))
 		return
 	}
 	defer resp.Body.Close()
 	w.WriteHeader(resp.StatusCode)
-	io.Copy(w, resp.Body)
+	_, _ = io.Copy(w, resp.Body)
 }

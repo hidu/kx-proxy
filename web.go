@@ -10,8 +10,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/fsgo/fsgo/fsfs"
 	"github.com/fsgo/fsgo/fsos"
-	"github.com/fsgo/fsgo/fsos/fsfs"
 
 	"github.com/hidu/kx-proxy/internal"
 	"github.com/hidu/kx-proxy/internal/handler"
@@ -21,10 +21,10 @@ var addr = flag.String("addr", "127.0.0.1:8085", "listen addr,eg :8085")
 var cd = flag.String("cache_dir", "./cache/", "cache dir")
 var alog = flag.String("log", "./log/kx.log", "log file")
 
-func main() {
-	flag.StringVar(&internal.NameServer, "nameserver", "114.114.114.114,1.1.1.1", "nameserver list")
-	flag.StringVar(&internal.DNSBlockFile, "dns_block", "./conf/dns_block.txt", "dns block file")
+// DNS 配置文件，若文件不存在将跳过
+var dnsConf = flag.String("dns", "./conf/dns.toml", "dns group config file")
 
+func main() {
 	flag.Parse()
 
 	setupLogFile(*alog)
@@ -32,7 +32,7 @@ func main() {
 	handler.InitCache(*cd)
 	log.Println("kx-proxy listening on :", *addr)
 
-	internal.SetUpDNS()
+	internal.SetupDNS(*dnsConf)
 
 	proxy := handler.NewKxProxy()
 
@@ -45,7 +45,7 @@ func main() {
 		log.Println("received signal", sig)
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		ser.Shutdown(ctx)
+		_ = ser.Shutdown(ctx)
 	}()
 
 	err := ser.ListenAndServe()
@@ -57,10 +57,10 @@ func setupLogFile(fp string) {
 	af := &fsfs.Rotator{
 		Path:     fp,
 		ExtRule:  "1hour",
-		MaxFiles: 72,
+		MaxFiles: 24,
 	}
 	af.AfterChange(func(f *os.File) {
-		fsos.HookStderr(f)
+		_ = fsos.HookStderr(f)
 	})
 	if err := af.Init(); err != nil {
 		panic(err)

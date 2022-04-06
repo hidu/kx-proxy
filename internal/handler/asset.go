@@ -10,11 +10,11 @@ import (
 var asset embed.FS
 
 // handle /ucss/abcd.css
-func (k *KxProxy) handlerUcss(w http.ResponseWriter, r *http.Request) {
-	isCss := strings.HasSuffix(r.URL.Path, ".css")
+func (k *KxProxy) handlerUserCSS(w http.ResponseWriter, r *http.Request) {
+	isCSS := strings.HasSuffix(r.URL.Path, ".css")
 	isJS := strings.HasSuffix(r.URL.Path, ".js")
 
-	if !(isCss || isJS) || strings.Count(r.URL.Path, "/") > 2 {
+	if !(isCSS || isJS) || strings.Count(r.URL.Path, "/") > 2 {
 		http.NotFoundHandler().ServeHTTP(w, r)
 		return
 	}

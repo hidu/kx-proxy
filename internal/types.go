@@ -16,7 +16,8 @@ type ContentType string
 func (ct ContentType) IsHTML() bool {
 	return ct.Is("text/html")
 }
-func (ct ContentType) IsCss() bool {
+
+func (ct ContentType) IsCSS() bool {
 	return ct.Is("text/css")
 }
 

@@ -1,7 +1,7 @@
 package handler
 
 import (
-	_ "embed"
+	_ "embed" // for asset file
 	"html/template"
 	"net/http"
 	"net/url"
@@ -74,7 +74,7 @@ func (k *KxProxy) handlerHome(w http.ResponseWriter, r *http.Request) {
 func (k *KxProxy) handlerHomePost(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		w.WriteHeader(400)
-		w.Write([]byte("ParseForm failed:" + err.Error()))
+		_, _ = w.Write([]byte("ParseForm failed:" + err.Error()))
 		return
 	}
 	enteredURL := r.FormValue("url")
@@ -86,13 +86,13 @@ func (k *KxProxy) handlerHomePost(w http.ResponseWriter, r *http.Request) {
 	validURL, err := url.Parse(enteredURL)
 	if err != nil {
 		w.WriteHeader(400)
-		w.Write([]byte("Parse url failed:" + err.Error()))
+		_, _ = w.Write([]byte("Parse url failed:" + err.Error()))
 		return
 	}
 
 	// prepend http if not specified
 	if validURL.Scheme != "http" && validURL.Scheme != "https" {
-		w.Write([]byte("invalid Scheme: " + validURL.Scheme))
+		_, _ = w.Write([]byte("invalid Scheme: " + validURL.Scheme))
 		return
 	}
 
@@ -106,7 +106,7 @@ func (k *KxProxy) handlerHomePost(w http.ResponseWriter, r *http.Request) {
 	pu := links.NewProxyURL(validURL.String(), opu, r)
 	encodedURL, err := pu.Encode()
 	if err != nil {
-		w.Write([]byte("build url failed:" + err.Error()))
+		_, _ = w.Write([]byte("build url failed:" + err.Error()))
 		return
 	}
 	http.Redirect(w, r, "/p/"+encodedURL, 302)

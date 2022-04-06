@@ -30,20 +30,15 @@ var Client = &http.Client{
 }
 
 func init() {
-	dialSum := prometheus.NewSummaryVec(
-		prometheus.SummaryOpts{
+	dialVec := prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
 			Namespace: "net",
 			Name:      "dial_seconds",
 			Help:      "dial latency distributions.",
-			Objectives: map[float64]float64{
-				0.5:  0.05,
-				0.9:  0.01,
-				0.99: 0.001,
-			},
 		},
 		[]string{"status"},
 	)
-	metrics.DefaultReg.MustRegister(dialSum)
+	metrics.DefaultReg.MustRegister(dialVec)
 
 	readBytesCounter := prometheus.NewCounter(prometheus.CounterOpts{
 		Namespace: "net",
@@ -57,73 +52,76 @@ func init() {
 	})
 	metrics.DefaultReg.MustRegister(writeBytesCounter)
 
-	stHook := &fsnet.ConnHook{
-		Read: func(b []byte, raw func([]byte) (int, error)) (n int, err error) {
+	stIt := &fsnet.ConnInterceptor{
+		Read: func(b []byte, invoker func([]byte) (int, error)) (n int, err error) {
 			defer func() {
 				readBytesCounter.Add(float64(n))
 			}()
-			return raw(b)
+			return invoker(b)
 		},
-		Write: func(b []byte, raw func([]byte) (int, error)) (n int, err error) {
+		Write: func(b []byte, invoker func([]byte) (int, error)) (n int, err error) {
 			defer func() {
 				writeBytesCounter.Add(float64(n))
 			}()
-			return raw(b)
+			return invoker(b)
 		},
 	}
 
-	hk := &fsnet.DialerHook{
-		DialContext: func(ctx context.Context, network string, address string, fn fsnet.DialContextFunc) (conn net.Conn, err error) {
+	dialIt := &fsnet.DialerInterceptor{
+		DialContext: func(ctx context.Context, network string, address string, invoker fsnet.DialContextFunc) (conn net.Conn, err error) {
 			tm := prometheus.NewTimer(prometheus.ObserverFunc(func(v float64) {
 				if err == nil {
-					dialSum.WithLabelValues("success").Observe(v)
+					dialVec.WithLabelValues("success").Observe(v)
 				} else {
-					dialSum.WithLabelValues("fail").Observe(v)
+					dialVec.WithLabelValues("fail").Observe(v)
 				}
 			}))
 
-			conn, err = fn(ctx, network, address)
+			conn, err = invoker(ctx, network, address)
 
 			tm.ObserveDuration()
 			if err != nil {
 				return nil, err
 			}
-			return fsnet.NewConn(conn, stHook), nil
+			return fsnet.WrapConn(conn, stIt), nil
 		},
 	}
-	fsnet.MustRegisterDialerHook(hk)
+	fsnet.MustRegisterDialerInterceptor(dialIt)
 }
 
 func init() {
-	resolverSum := prometheus.NewSummaryVec(
-		prometheus.SummaryOpts{
+	resolverVec := prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
 			Namespace: "net",
 			Name:      "lookupip_seconds",
 			Help:      "Resolver LookupIP latency distributions.",
-			Objectives: map[float64]float64{
-				0.5:  0.05,
-				0.9:  0.01,
-				0.99: 0.001,
-			},
 		},
 		[]string{"status"},
 	)
-	metrics.DefaultReg.MustRegister(resolverSum)
+	metrics.DefaultReg.MustRegister(resolverVec)
 
-	hook := &fsnet.ResolverHook{
-		LookupIP: func(ctx context.Context, network, host string, fn fsnet.LookupIPFunc) (ret []net.IP, err error) {
+	it := &fsnet.ResolverInterceptor{
+		LookupIP: func(ctx context.Context, network, host string, invoker fsnet.LookupIPFunc) (ret []net.IP, err error) {
 			tm := prometheus.NewTimer(prometheus.ObserverFunc(func(v float64) {
 				if err == nil {
-					resolverSum.WithLabelValues("success").Observe(v)
+					resolverVec.WithLabelValues("success").Observe(v)
 				} else {
-					resolverSum.WithLabelValues("fail").Observe(v)
+					resolverVec.WithLabelValues("fail").Observe(v)
 				}
 			}))
 
 			defer tm.ObserveDuration()
 
-			return fn(ctx, network, host)
+			return invoker(ctx, network, host)
 		},
 	}
-	fsnet.MustRegisterResolverHook(hook)
+	fsnet.MustRegisterResolverInterceptor(it)
+}
+
+func init() {
+	// cp:=&fsnet.ConnDuplicate{
+	// 	WriterTo: os.Stdout,
+	// 	ReadTo: os.Stdout,
+	// }
+	// fsnet.RegisterConnInterceptor(cp.ConnInterceptor())
 }

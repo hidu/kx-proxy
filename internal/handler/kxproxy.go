@@ -13,6 +13,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/hidu/kx-proxy/internal/links"
@@ -40,7 +41,7 @@ func (k *KxProxy) init() {
 	k.router.PathPrefix("/p/").HandlerFunc(k.handlerProxy)
 	k.router.PathPrefix("/get/").HandlerFunc(k.handlerGet)
 	k.router.HandleFunc("/hello", handlerHello)
-	k.router.PathPrefix("/ucss/").HandlerFunc(k.handlerUcss)
+	k.router.PathPrefix("/ucss/").HandlerFunc(k.handlerUserCSS)
 	k.router.HandleFunc("/favicon.ico", k.handlerFavicon)
 	k.router.PathPrefix("/asset/").HandlerFunc(k.handlerAsset)
 
@@ -54,24 +55,23 @@ func (k *KxProxy) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 
 func handlerHello(w http.ResponseWriter, r *http.Request) {
 	t, _ := links.EncryptURL(fmt.Sprintf("%d", time.Now().Unix()))
-	w.Write([]byte(t))
+	_, _ = w.Write([]byte(t))
 }
 
-var pvCounter *prometheus.CounterVec
-var pvCost *prometheus.CounterVec
+var pvVec *prometheus.HistogramVec
 
 func init() {
-	pvCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "http_requests_total",
+	pvVec = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Name: "server_requests_seconds",
 	}, []string{"method", "api"})
 
-	metrics.DefaultReg.MustRegister(pvCounter)
+	metrics.DefaultReg.MustRegister(pvVec)
 
-	pvCost = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "http_requests_cost",
-	}, []string{"method", "api"})
+	c1 := collectors.NewGoCollector()
+	metrics.DefaultReg.MustRegister(c1)
 
-	metrics.DefaultReg.MustRegister(pvCost)
+	c2 := collectors.NewProcessCollector(collectors.ProcessCollectorOpts{})
+	metrics.DefaultReg.MustRegister(c2)
 }
 
 func metricsMiddleware(next http.Handler) http.Handler {
@@ -85,7 +85,6 @@ func metricsMiddleware(next http.Handler) http.Handler {
 		if api == "" {
 			api = "home"
 		}
-		pvCounter.WithLabelValues(r.Method, api).Inc()
-		pvCounter.WithLabelValues(r.Method, api).Add(cost.Seconds())
+		pvVec.WithLabelValues(r.Method, api).Observe(cost.Seconds())
 	})
 }
