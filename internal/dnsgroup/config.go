@@ -8,8 +8,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/fsgo/fsgo/fsnet"
 	"github.com/fsgo/fsgo/fsnet/fsdns"
+	"github.com/fsgo/fsgo/fsnet/fsresolver"
 )
 
 type Config struct {
@@ -44,7 +44,7 @@ func (c *Config) parser() {
 	if len(c.resolvers) == 0 {
 		def := &resolver{
 			Name:     "fsnet_default",
-			Resolver: fsnet.DefaultResolver,
+			Resolver: fsresolver.Default,
 		}
 		c.resolvers = append(c.resolvers, def)
 	}
@@ -55,7 +55,7 @@ func (c *Config) toResolver(item *ConfigNameServer) *resolver {
 		HostsFile: fsdns.DefaultHostsFile,
 		Servers:   fsdns.ParserServers(item.Hosts),
 	}
-	rc := &fsnet.ResolverCached{
+	rc := &fsresolver.Cached{
 		Invoker: client,
 	}
 	rc.Expiration = rc.ExpirationFromEnv()

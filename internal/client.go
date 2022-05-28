@@ -10,7 +10,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/fsgo/fsgo/fsnet"
+	"github.com/fsgo/fsgo/fsnet/fsconn"
+	"github.com/fsgo/fsgo/fsnet/fsdialer"
+	"github.com/fsgo/fsgo/fsnet/fsresolver"
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/hidu/kx-proxy/internal/metrics"
@@ -20,7 +22,7 @@ var Client = &http.Client{
 	Timeout: 30 * time.Second,
 	Transport: &http.Transport{
 		Proxy:                 http.ProxyFromEnvironment,
-		DialContext:           fsnet.DialContext,
+		DialContext:           fsdialer.DialContext,
 		ForceAttemptHTTP2:     true,
 		MaxIdleConns:          10,
 		IdleConnTimeout:       10 * time.Second,
@@ -52,23 +54,17 @@ func init() {
 	})
 	metrics.DefaultReg.MustRegister(writeBytesCounter)
 
-	stIt := &fsnet.ConnInterceptor{
-		Read: func(b []byte, invoker func([]byte) (int, error)) (n int, err error) {
-			defer func() {
-				readBytesCounter.Add(float64(n))
-			}()
-			return invoker(b)
+	stIt := &fsconn.Interceptor{
+		AfterRead: func(info fsconn.Info, b []byte, readSize int, err error) {
+			readBytesCounter.Add(float64(readSize))
 		},
-		Write: func(b []byte, invoker func([]byte) (int, error)) (n int, err error) {
-			defer func() {
-				writeBytesCounter.Add(float64(n))
-			}()
-			return invoker(b)
+		AfterWrite: func(info fsconn.Info, b []byte, wroteSize int, err error) {
+			writeBytesCounter.Add(float64(wroteSize))
 		},
 	}
 
-	dialIt := &fsnet.DialerInterceptor{
-		DialContext: func(ctx context.Context, network string, address string, invoker fsnet.DialContextFunc) (conn net.Conn, err error) {
+	dialIt := &fsdialer.Interceptor{
+		DialContext: func(ctx context.Context, network string, address string, invoker fsdialer.DialContextFunc) (conn net.Conn, err error) {
 			tm := prometheus.NewTimer(prometheus.ObserverFunc(func(v float64) {
 				if err == nil {
 					dialVec.WithLabelValues("success").Observe(v)
@@ -83,10 +79,10 @@ func init() {
 			if err != nil {
 				return nil, err
 			}
-			return fsnet.WrapConn(conn, stIt), nil
+			return fsconn.WithInterceptor(conn, stIt), nil
 		},
 	}
-	fsnet.MustRegisterDialerInterceptor(dialIt)
+	fsdialer.MustRegisterInterceptor(dialIt)
 }
 
 func init() {
@@ -100,8 +96,8 @@ func init() {
 	)
 	metrics.DefaultReg.MustRegister(resolverVec)
 
-	it := &fsnet.ResolverInterceptor{
-		LookupIP: func(ctx context.Context, network, host string, invoker fsnet.LookupIPFunc) (ret []net.IP, err error) {
+	it := &fsresolver.Interceptor{
+		LookupIP: func(ctx context.Context, network, host string, invoker fsresolver.LookupIPFunc) (ret []net.IP, err error) {
 			tm := prometheus.NewTimer(prometheus.ObserverFunc(func(v float64) {
 				if err == nil {
 					resolverVec.WithLabelValues("success").Observe(v)
@@ -115,13 +111,13 @@ func init() {
 			return invoker(ctx, network, host)
 		},
 	}
-	fsnet.MustRegisterResolverInterceptor(it)
+	fsresolver.MustRegisterInterceptor(it)
 }
 
 func init() {
-	// cp:=&fsnet.ConnDuplicate{
+	// cp:=&fsnet.ConnCopy{
 	// 	WriterTo: os.Stdout,
 	// 	ReadTo: os.Stdout,
 	// }
-	// fsnet.RegisterConnInterceptor(cp.ConnInterceptor())
+	// fsnet.RegisterConnInterceptor(cp.Interceptor())
 }

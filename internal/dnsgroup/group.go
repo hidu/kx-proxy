@@ -12,10 +12,10 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/fsgo/fsgo/fsnet"
+	"github.com/fsgo/fsgo/fsnet/fsresolver"
 )
 
-var _ fsnet.Resolver = (*ResolverGroup)(nil)
+var _ fsresolver.Resolver = (*ResolverGroup)(nil)
 
 type ResolverGroup struct {
 	Config *Config
@@ -44,12 +44,12 @@ func (r *ResolverGroup) find(host string) resolvers {
 	return r.Config.findResolvers(host)
 }
 
-var _ fsnet.Resolver = (*resolver)(nil)
+var _ fsresolver.Resolver = (*resolver)(nil)
 
 type resolver struct {
 	Name       string
 	Timeout    int
-	Resolver   fsnet.Resolver
+	Resolver   fsresolver.Resolver
 	DomainRule []*regexp.Regexp
 }
 
@@ -95,7 +95,7 @@ func (r *resolver) LookupIPAddr(ctx context.Context, host string) ([]net.IPAddr,
 	return ret, err
 }
 
-var _ fsnet.Resolver = (*resolvers)(nil)
+var _ fsresolver.Resolver = (*resolvers)(nil)
 
 type resolvers []*resolver
 

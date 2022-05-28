@@ -8,7 +8,7 @@ import (
 	"log"
 
 	"github.com/fsgo/fsconf"
-	"github.com/fsgo/fsgo/fsnet"
+	"github.com/fsgo/fsgo/fsnet/fsresolver"
 
 	"github.com/hidu/kx-proxy/internal/dnsgroup"
 )
@@ -24,8 +24,6 @@ func SetupDNS(confPath string) {
 	}
 	g := cfg.ToGroup()
 
-	// fsnet.MustRegisterResolverInterceptor(fsnet.PrintResolverLog)
-
-	fsnet.MustRegisterResolverInterceptor(fsnet.ResolverToInterceptor(g))
+	fsresolver.MustRegisterInterceptor(fsresolver.ToInterceptor(g))
 	log.Println("use dns group with config:", confPath)
 }
