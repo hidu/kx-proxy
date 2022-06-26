@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/fsgo/fsgo/fsfs"
+	"github.com/fsgo/fsgo/fsnet/fsconn/conndump"
 	"github.com/fsgo/fsgo/fsos"
 
 	"github.com/hidu/kx-proxy/internal"
@@ -20,6 +22,7 @@ import (
 var addr = flag.String("addr", "127.0.0.1:8085", "listen addr,eg :8085")
 var cd = flag.String("cache_dir", "./cache/", "cache dir")
 var alog = flag.String("log", "./log/kx.log", "log file")
+var rpcdump = flag.String("rpcdump", "./data/rpcdump/", "rpcdump data dir")
 
 // DNS 配置文件，若文件不存在将跳过
 var dnsConf = flag.String("dns", "./conf/dns.toml", "dns group config file")
@@ -39,7 +42,26 @@ func main() {
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
-	ser := &http.Server{Addr: *addr, Handler: proxy}
+	l, err := net.Listen("tcp", *addr)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	if len(*rpcdump) > 0 {
+		log.Println("rpcdump is enable, export dir:", *rpcdump)
+		dm := &conndump.Dumper{
+			DataDir: *rpcdump,
+			RotatorConfig: func(client bool, r *fsfs.Rotator) {
+				r.MaxFiles = 72
+				r.ExtRule = "1hour"
+			},
+		}
+		dm.DumpAll(true)
+		internal.Dumper = dm
+		l = dm.WrapListener("http_server", l)
+	}
+
+	ser := &http.Server{Handler: proxy}
 	go func() {
 		sig := <-ch
 		log.Println("received signal", sig)
@@ -48,7 +70,7 @@ func main() {
 		_ = ser.Shutdown(ctx)
 	}()
 
-	err := ser.ListenAndServe()
+	err = ser.Serve(l)
 
 	log.Println("kx-proxy exit:", err)
 }

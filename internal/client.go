@@ -21,8 +21,15 @@ import (
 var Client = &http.Client{
 	Timeout: 30 * time.Second,
 	Transport: &http.Transport{
-		Proxy:                 http.ProxyFromEnvironment,
-		DialContext:           fsdialer.DialContext,
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			conn, err := fsdialer.DialContext(ctx, network, addr)
+			if err != nil || Dumper == nil {
+				return conn, err
+			}
+			conn = fsconn.WithService("http_client", conn)
+			return fsconn.WithInterceptor(conn, Dumper.ClientConnInterceptor()), nil
+		},
 		ForceAttemptHTTP2:     true,
 		MaxIdleConns:          10,
 		IdleConnTimeout:       10 * time.Second,

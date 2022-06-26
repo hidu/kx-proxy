@@ -5,7 +5,7 @@ go 1.18
 require (
 	github.com/fsgo/fscache v0.0.0-20210819153355-395397445282
 	github.com/fsgo/fsconf v0.2.4
-	github.com/fsgo/fsgo v0.0.5-0.20220522145120-73a0ce5117e0
+	github.com/fsgo/fsgo v0.0.5-0.20220626040311-4ea0eb650ce6
 	github.com/gorilla/mux v1.8.0
 	github.com/prometheus/client_golang v1.12.2
 	github.com/tdewolff/minify/v2 v2.11.5
