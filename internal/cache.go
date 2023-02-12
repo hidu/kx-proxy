@@ -46,7 +46,7 @@ type FileCache struct {
 
 func (fc *FileCache) Get(key string) *CacheData {
 	ret := fc.cache.Get(context.Background(), key)
-	if err := ret.Err(); err != nil {
+	if ret.Err != nil {
 		return nil
 	}
 	var cd *CacheData
@@ -60,6 +60,7 @@ func (fc *FileCache) Get(key string) *CacheData {
 func (fc *FileCache) Set(key string, data *CacheData) {
 	fc.SetWithTTL(key, data, defaultTTL)
 }
+
 func (fc *FileCache) SetWithTTL(key string, data *CacheData, ttl time.Duration) {
 	fc.cache.Set(context.Background(), key, data, ttl)
 }
@@ -70,5 +71,5 @@ func (fc *FileCache) Del(key string) {
 
 func (fc *FileCache) Has(key string) bool {
 	ret := fc.cache.Has(context.Background(), key)
-	return ret.Has()
+	return ret.Has
 }

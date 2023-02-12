@@ -46,5 +46,5 @@ func (k *KxProxy) handler404(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.Redirect(w, r, "/p/"+encodedURL, 302)
+	http.Redirect(w, r, "/p/"+encodedURL, http.StatusFound)
 }

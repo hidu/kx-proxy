@@ -63,7 +63,7 @@ func (k *KxProxy) handlerHome(w http.ResponseWriter, r *http.Request) {
 	}
 
 	qs := r.URL.Query()
-	datas := map[string]interface{}{
+	datas := map[string]any{
 		"url":    qs.Get("url"),
 		"expire": qs.Get("expire"),
 		"ext":    qs.Get("ext"),
@@ -79,7 +79,7 @@ func (k *KxProxy) handlerHomePost(w http.ResponseWriter, r *http.Request) {
 	}
 	enteredURL := r.FormValue("url")
 	if enteredURL == "" {
-		http.Redirect(w, r, "/", 302)
+		http.Redirect(w, r, "/", http.StatusFound)
 		return
 	}
 
@@ -109,5 +109,5 @@ func (k *KxProxy) handlerHomePost(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("build url failed:" + err.Error()))
 		return
 	}
-	http.Redirect(w, r, "/p/"+encodedURL, 302)
+	http.Redirect(w, r, "/p/"+encodedURL, http.StatusFound)
 }

@@ -13,9 +13,9 @@ var m = minify.New()
 
 func init() {
 	m.AddFunc("text/css", css.Minify)
-	html.DefaultMinifier.KeepQuotes = true
-	html.DefaultMinifier.KeepEndTags = true
-	html.DefaultMinifier.KeepWhitespace = true
+	// html.DefaultMinifier.KeepQuotes = true
+	// html.DefaultMinifier.KeepEndTags = true
+	// html.DefaultMinifier.KeepWhitespace = true
 	m.AddFunc("text/html", html.Minify)
 }
 

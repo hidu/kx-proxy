@@ -70,19 +70,21 @@ func init() {
 		},
 	}
 
+	type dialCtxKey struct{}
+
 	dialIt := &fsdialer.Interceptor{
-		DialContext: func(ctx context.Context, network string, address string, invoker fsdialer.DialContextFunc) (conn net.Conn, err error) {
-			tm := prometheus.NewTimer(prometheus.ObserverFunc(func(v float64) {
-				if err == nil {
-					dialVec.WithLabelValues("success").Observe(v)
-				} else {
-					dialVec.WithLabelValues("fail").Observe(v)
-				}
-			}))
-
-			conn, err = invoker(ctx, network, address)
-
-			tm.ObserveDuration()
+		BeforeDialContext: func(ctx context.Context, network string, address string) (context.Context, string, string) {
+			ctx = context.WithValue(ctx, dialCtxKey{}, time.Now())
+			return ctx, network, address
+		},
+		AfterDialContext: func(ctx context.Context, network string, address string, conn net.Conn, err error) (net.Conn, error) {
+			start := ctx.Value(dialCtxKey{}).(time.Time)
+			cost := time.Since(start)
+			if err == nil {
+				dialVec.WithLabelValues("success").Observe(cost.Seconds())
+			} else {
+				dialVec.WithLabelValues("fail").Observe(cost.Seconds())
+			}
 			if err != nil {
 				return nil, err
 			}
@@ -103,19 +105,22 @@ func init() {
 	)
 	metrics.DefaultReg.MustRegister(resolverVec)
 
+	type resolverCtxKey struct{}
+
 	it := &fsresolver.Interceptor{
-		LookupIP: func(ctx context.Context, network, host string, invoker fsresolver.LookupIPFunc) (ret []net.IP, err error) {
-			tm := prometheus.NewTimer(prometheus.ObserverFunc(func(v float64) {
-				if err == nil {
-					resolverVec.WithLabelValues("success").Observe(v)
-				} else {
-					resolverVec.WithLabelValues("fail").Observe(v)
-				}
-			}))
-
-			defer tm.ObserveDuration()
-
-			return invoker(ctx, network, host)
+		BeforeLookupIP: func(ctx context.Context, network, host string) (c context.Context, n, h string) {
+			ctx = context.WithValue(ctx, resolverCtxKey{}, time.Now())
+			return ctx, network, host
+		},
+		AfterLookupIP: func(ctx context.Context, network, host string, ips []net.IP, err error) ([]net.IP, error) {
+			start := ctx.Value(resolverCtxKey{}).(time.Time)
+			cost := time.Since(start)
+			if err == nil {
+				resolverVec.WithLabelValues("success").Observe(cost.Seconds())
+			} else {
+				resolverVec.WithLabelValues("fail").Observe(cost.Seconds())
+			}
+			return ips, err
 		},
 	}
 	fsresolver.MustRegisterInterceptor(it)

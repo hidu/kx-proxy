@@ -6,7 +6,6 @@ import (
 	"crypto/md5"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -135,7 +134,7 @@ func (d *DoProxy) do(ctx context.Context, w http.ResponseWriter, r *http.Request
 	}
 
 	if rg != "" {
-		http.Redirect(w, r, rg, 302)
+		http.Redirect(w, r, rg, http.StatusFound)
 		return
 	}
 
@@ -143,9 +142,9 @@ func (d *DoProxy) do(ctx context.Context, w http.ResponseWriter, r *http.Request
 	canCache := pu.CacheAble() && resp.ContentType.CanCache()
 
 	if canCache {
-		if resp.StatusCode == 200 {
+		if resp.StatusCode == http.StatusOK {
 			// canCache
-		} else if resp.StatusCode == 404 && pu.IsStaticURL() {
+		} else if resp.StatusCode == http.StatusNotFound && pu.IsStaticURL() {
 			// canCache
 		} else {
 			canCache = false
@@ -177,7 +176,7 @@ func (d *DoProxy) fromCache(urlString string) *internal.Response {
 	cd := fileCache.Get(urlString)
 	if cd != nil {
 		return &internal.Response{
-			StatusCode:  200,
+			StatusCode:  http.StatusOK,
 			ContentType: cd.ContentType(),
 			Body:        cd.Body,
 			HeaderMap:   cd.Header,
@@ -202,7 +201,7 @@ func (d *DoProxy) directGet(ctx context.Context, r *http.Request, pu *links.Prox
 
 	if contentType.CanCache() {
 		defer resp.Body.Close()
-		body, err2 := ioutil.ReadAll(io.LimitReader(resp.Body, internal.CacheMaxSize))
+		body, err2 := io.ReadAll(io.LimitReader(resp.Body, internal.CacheMaxSize))
 		if err2 != nil {
 			return nil, err2
 		}
@@ -288,7 +287,6 @@ func (d *DoProxy) reWriteHTML(r *http.Request, resp *internal.Response, pu *link
 		go preLoader.PreLoad(pu, body, internal.PreLoadTypeNext)
 	} else if pu.Extension.PreloadingSameDir() {
 		go preLoader.PreLoad(pu, body, internal.PreLoadTypeSameDir)
-
 	} else if pu.Extension.Preloading() {
 		go preLoader.PreLoad(pu, body, internal.PreLoadTypeAll)
 	}

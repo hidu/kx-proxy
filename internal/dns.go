@@ -27,3 +27,8 @@ func SetupDNS(confPath string) {
 	fsresolver.MustRegisterInterceptor(fsresolver.ToInterceptor(g))
 	log.Println("use dns group with config:", confPath)
 }
+
+func init() {
+	cache := &fsresolver.CacheInterceptor{}
+	fsresolver.MustRegisterInterceptor(cache.Interceptor())
+}
