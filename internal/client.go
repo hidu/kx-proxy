@@ -28,7 +28,7 @@ var Client = &http.Client{
 				return conn, err
 			}
 			conn = fsconn.WithService("http_client", conn)
-			return fsconn.WithInterceptor(conn, Dumper.ClientConnInterceptor()), nil
+			return fsconn.Wrap(conn, Dumper.ClientConnInterceptor()), nil
 		},
 		ForceAttemptHTTP2:     true,
 		MaxIdleConns:          10,
@@ -88,7 +88,7 @@ func init() {
 			if err != nil {
 				return nil, err
 			}
-			return fsconn.WithInterceptor(conn, stIt), nil
+			return fsconn.Wrap(conn, stIt), nil
 		},
 	}
 	fsdialer.MustRegisterInterceptor(dialIt)

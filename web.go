@@ -21,7 +21,7 @@ import (
 
 var addr = flag.String("addr", "127.0.0.1:8085", "listen addr,eg :8085")
 var cd = flag.String("cache_dir", "./cache/", "cache dir")
-var alog = flag.String("log", "./log/kx.log", "log file")
+var alog = flag.String("log", "./log/kx.log", "log file. value 'stderr' to stderr")
 var rpcdump = flag.String("rpcdump", "./data/rpcdump/", "rpcdump data dir")
 
 // DNS 配置文件，若文件不存在将跳过
@@ -76,6 +76,9 @@ func main() {
 }
 
 func setupLogFile(fp string) {
+	if fp == "stderr" {
+		return
+	}
 	af := &fsfs.Rotator{
 		Path:     fp,
 		ExtRule:  "1hour",

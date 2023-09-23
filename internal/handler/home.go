@@ -68,6 +68,10 @@ func (k *KxProxy) handlerHome(w http.ResponseWriter, r *http.Request) {
 		"expire": qs.Get("expire"),
 		"ext":    qs.Get("ext"),
 	}
+	if qs.Get("mp") != "" {
+		datas["mp"] = true
+		datas["more"] = qs.Get("more")
+	}
 	_ = homeTpl.Execute(w, datas)
 }
 
