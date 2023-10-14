@@ -49,7 +49,7 @@ func (ct ContentType) IsStaticFile() bool {
 	return true
 }
 
-type LogData map[string]interface{}
+type LogData map[string]any
 
 func (l LogData) Merge(b LogData) {
 	for k, v := range b {

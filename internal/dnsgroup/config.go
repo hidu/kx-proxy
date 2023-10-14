@@ -27,6 +27,7 @@ type Config struct {
 type ConfigNameServer struct {
 	Name  string
 	Hosts []string
+
 	// Timeout 使用此组配置查询的超时时间，可选，默认为 500
 	Timeout int
 

@@ -5,6 +5,7 @@ go 1.21
 require (
 	github.com/fsgo/fscache v0.0.1
 	github.com/fsgo/fsconf v0.3.0
+	github.com/fsgo/fsenv v0.4.0
 	github.com/fsgo/fsgo v0.0.7-0.20230923121452-087af3e7a1e0
 	github.com/gorilla/mux v1.8.0
 	github.com/prometheus/client_golang v1.16.0
@@ -15,7 +16,6 @@ require (
 	github.com/BurntSushi/toml v1.3.2 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
-	github.com/fsgo/fsenv v0.4.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.2 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect

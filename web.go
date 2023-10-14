@@ -8,9 +8,11 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
+	"github.com/fsgo/fsenv"
 	"github.com/fsgo/fsgo/fsfs"
 	"github.com/fsgo/fsgo/fsnet/fsconn/conndump"
 	"github.com/fsgo/fsgo/fsos"
@@ -20,22 +22,27 @@ import (
 )
 
 var addr = flag.String("addr", "127.0.0.1:8085", "listen addr,eg :8085")
-var cd = flag.String("cache_dir", "./cache/", "cache dir")
+var confDir = flag.String("conf", "./conf", "config dir")
+var cd = flag.String("cache", "./cache", "cache dir")
+var dataDir = flag.String("data", "./data", "data dir")
 var alog = flag.String("log", "./log/kx.log", "log file. value 'stderr' to stderr")
-var rpcdump = flag.String("rpcdump", "./data/rpcdump/", "rpcdump data dir")
+var rpcdump = flag.Bool("rpcdump", false, "enable rpcdump")
 
-// DNS 配置文件，若文件不存在将跳过
-var dnsConf = flag.String("dns", "./conf/dns.toml", "dns group config file")
+func setupEnv() {
+	fsenv.SetConfRootDir(*confDir)
+	fsenv.SetDataRootDir(*dataDir)
+}
 
 func main() {
 	flag.Parse()
+	setupEnv()
 
 	setupLogFile(*alog)
 
 	handler.InitCache(*cd)
 	log.Println("kx-proxy listening on :", *addr)
 
-	internal.SetupDNS(*dnsConf)
+	internal.SetupDNS()
 
 	proxy := handler.NewKxProxy()
 
@@ -47,21 +54,10 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	if len(*rpcdump) > 0 {
-		log.Println("rpcdump is enable, export dir:", *rpcdump)
-		dm := &conndump.Dumper{
-			DataDir: *rpcdump,
-			RotatorConfig: func(client bool, r *fsfs.Rotator) {
-				r.MaxFiles = 72
-				r.ExtRule = "1hour"
-			},
-		}
-		dm.DumpAll(true)
-		internal.Dumper = dm
-		l = dm.WrapListener("http_server", l)
+	l = setupRPCDump(l)
+	ser := &http.Server{
+		Handler: proxy,
 	}
-
-	ser := &http.Server{Handler: proxy}
 	go func() {
 		sig := <-ch
 		log.Println("received signal", sig)
@@ -73,6 +69,24 @@ func main() {
 	err = ser.Serve(l)
 
 	log.Println("kx-proxy exit:", err)
+}
+
+func setupRPCDump(l net.Listener) net.Listener {
+	if !*rpcdump {
+		return l
+	}
+	dumpDir := filepath.Join(fsenv.DataRootDir(), "rpcdump")
+	log.Println("rpcdump is enable, export dir:", dumpDir)
+	dm := &conndump.Dumper{
+		DataDir: dumpDir,
+		RotatorConfig: func(client bool, r *fsfs.Rotator) {
+			r.MaxFiles = 72
+			r.ExtRule = "1hour"
+		},
+	}
+	dm.DumpAll(true)
+	internal.Dumper = dm
+	return dm.WrapListener("http_server", l)
 }
 
 func setupLogFile(fp string) {

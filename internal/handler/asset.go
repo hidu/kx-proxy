@@ -3,7 +3,10 @@ package handler
 import (
 	"embed"
 	"net/http"
+	"path/filepath"
 	"strings"
+
+	"github.com/fsgo/fsenv"
 )
 
 //go:embed asset
@@ -18,7 +21,8 @@ func (k *KxProxy) handlerUserCSS(w http.ResponseWriter, r *http.Request) {
 		http.NotFoundHandler().ServeHTTP(w, r)
 		return
 	}
-	http.StripPrefix("/ucss/", http.FileServer(http.Dir("./ucss/"))).ServeHTTP(w, r)
+	ucssDir := filepath.Join(fsenv.ConfRootDir(), "ucss")
+	http.StripPrefix("/ucss/", http.FileServer(http.Dir(ucssDir))).ServeHTTP(w, r)
 }
 
 func (k *KxProxy) handlerAsset(w http.ResponseWriter, r *http.Request) {

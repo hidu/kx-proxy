@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -22,7 +23,7 @@ type ProxyURL struct {
 	Extension Extensions `json:"x"`
 	Ref       string     `json:"r"`
 
-	ctxParams map[interface{}]interface{}
+	ctxParams map[any]any
 }
 
 const _URLStopChar = '.'
@@ -47,14 +48,14 @@ func (p *ProxyURL) SetNoCache() {
 	p.SetCtxParams(ctxParamsKeyNoCache, 1)
 }
 
-func (p *ProxyURL) SetCtxParams(key interface{}, val interface{}) {
+func (p *ProxyURL) SetCtxParams(key any, val any) {
 	if p.ctxParams == nil {
-		p.ctxParams = make(map[interface{}]interface{}, 1)
+		p.ctxParams = make(map[any]any, 1)
 	}
 	p.ctxParams[key] = val
 }
 
-func (p *ProxyURL) GetCtxParams(key interface{}) interface{} {
+func (p *ProxyURL) GetCtxParams(key any) any {
 	if p.ctxParams == nil {
 		return nil
 	}
@@ -176,7 +177,6 @@ func (p *ProxyURL) HeadHTML() []byte {
 		bf.WriteString(`">`)
 		bf.WriteString("Home")
 		bf.WriteString("</a>")
-
 	}
 
 	if p.Extension.Cache() {
@@ -193,6 +193,7 @@ func (p *ProxyURL) HeadHTML() []byte {
 func (p *ProxyURL) IsStaticURL() bool {
 	return IsStaticPath(p.URLStr)
 }
+
 func (p *ProxyURL) Hostname() string {
 	ru, erru := url.Parse(p.URLStr)
 	if erru == nil {
@@ -203,12 +204,12 @@ func (p *ProxyURL) Hostname() string {
 
 func DecodeProxyURL(encodedURL string) (p *ProxyURL, err error) {
 	if len(encodedURL) < 10 {
-		return nil, fmt.Errorf("path is too short")
+		return nil, errors.New("path is too short")
 	}
 
 	arr := strings.SplitN(encodedURL, string(_URLStopChar), 2)
 	if len(arr) != 2 {
-		return nil, fmt.Errorf("invalid encodedURL")
+		return nil, errors.New("invalid encodedURL")
 	}
 
 	urlStr := arr[0]
@@ -260,6 +261,7 @@ func (es Extensions) Preloading() bool {
 func (es Extensions) PreloadingSameDir() bool {
 	return es.Has("pre_sd")
 }
+
 func (es Extensions) PreloadingNext() bool {
 	return es.Has("pre_next")
 }
@@ -274,6 +276,10 @@ func (es Extensions) CacheStatic() bool {
 
 func (es Extensions) NoCache() bool {
 	return es.Has("no_cache")
+}
+
+func (es Extensions) SkipVerify() bool {
+	return es.Has("SkipVerify")
 }
 
 func (es Extensions) Timeout() time.Duration {

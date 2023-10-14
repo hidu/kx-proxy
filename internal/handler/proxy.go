@@ -9,9 +9,12 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/fsgo/fsenv"
 
 	"github.com/hidu/kx-proxy/internal"
 	"github.com/hidu/kx-proxy/internal/links"
@@ -193,7 +196,7 @@ func (d *DoProxy) directGet(ctx context.Context, r *http.Request, pu *links.Prox
 	}
 	req.Header.Set("Content-Type", r.Header.Get("Content-Type"))
 	req.Header.Set("User-Agent", r.Header.Get("User-Agent"))
-	resp, err1 := internal.Client.Do(req)
+	resp, err1 := internal.GetClient(pu.Extension.SkipVerify()).Do(req)
 	if err1 != nil {
 		return nil, err1
 	}
@@ -326,11 +329,11 @@ func (d *DoProxy) userCSS(pu *links.ProxyURL) string {
 	}
 	var buf strings.Builder
 	for _, ufile := range ucss {
-		if t := hasFile(ufile); t != "" {
+		if version := hasUserFile(ufile); version != "" {
 			buf.WriteString(`<link rel="stylesheet" href="`)
 			buf.WriteString(ufile)
 			buf.WriteString("?")
-			buf.WriteString(t)
+			buf.WriteString(version)
 			buf.WriteString(`" />`)
 			buf.WriteString("\n")
 		}
@@ -350,11 +353,11 @@ func (d *DoProxy) userJS(pu *links.ProxyURL) string {
 	}
 	var buf strings.Builder
 	for _, ufile := range ujss {
-		if t := hasFile(ufile); t != "" {
+		if version := hasUserFile(ufile); version != "" {
 			buf.WriteString(`<script src="`)
 			buf.WriteString(ufile)
 			buf.WriteString("?")
-			buf.WriteString(t)
+			buf.WriteString(version)
 			buf.WriteString(`" defer></script>`)
 			buf.WriteString("\n")
 		}
@@ -395,8 +398,12 @@ func staticCacheTime(resp *internal.Response) time.Duration {
 	return 0
 }
 
-func hasFile(name string) string {
-	info, err := os.Stat("./" + name)
+// hasUserFile 是否存在用户自定义的 js 、css
+//
+//	eg: /ucss/all.css, /ucss/all.js
+func hasUserFile(name string) string {
+	fp := filepath.Join(fsenv.ConfRootDir(), name)
+	info, err := os.Stat(fp)
 	if err != nil {
 		return ""
 	}

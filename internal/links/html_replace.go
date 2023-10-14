@@ -9,8 +9,8 @@ import (
 )
 
 var reBase = regexp.MustCompile("base +href=\"(.*?)\"")
-var reHTML = regexp.MustCompile("src=[\"\\'](.*?)[\"\\']|href=[\"\\'](.*?)[\"\\']|action=[\"\\'](.*?)[\"\\']")
-var reCSS = regexp.MustCompile("url\\([\"\\']?(.*?)[\"\\']?\\)")
+var reHTML = regexp.MustCompile(`src=["\'](.*?)["\']|href=["\'](.*?)["\']|action=["\'](.*?)["\']`)
+var reCSS = regexp.MustCompile(`url\(["\']?(.*?)["\']?\)`)
 
 func encodeURL(src []byte, baseHref string, urlString string, start int, end int, pu *ProxyURL, r *http.Request) []byte {
 	relURL := string(src[start:end])
@@ -110,7 +110,7 @@ func CSSURLReplace(body []byte, urlString string, pu *ProxyURL, r *http.Request)
 	})
 }
 
-var reAlink = regexp.MustCompile("(?i)<a href=[\"\\'](.*?)[\"\\']")
+var reAlink = regexp.MustCompile(`(?i)<a href=["\'](.*?)["\']`)
 
 func AllLinks(body []byte, baseHref string, urlNow string) []string {
 	if urlNow == "" {

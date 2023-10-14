@@ -6,6 +6,7 @@ package internal
 
 import (
 	"context"
+	"crypto/tls"
 	"net"
 	"net/http"
 	"time"
@@ -18,24 +19,39 @@ import (
 	"github.com/hidu/kx-proxy/internal/metrics"
 )
 
-var Client = &http.Client{
-	Timeout: 30 * time.Second,
-	Transport: &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			conn, err := fsdialer.DialContext(ctx, network, addr)
-			if err != nil || Dumper == nil {
-				return conn, err
-			}
-			conn = fsconn.WithService("http_client", conn)
-			return fsconn.Wrap(conn, Dumper.ClientConnInterceptor()), nil
+var client1 = newClient(false)
+var client2 = newClient(true)
+
+func GetClient(skipVerify bool) *http.Client {
+	if skipVerify {
+		return client2
+	}
+	return client1
+}
+
+func newClient(skipVerify bool) *http.Client {
+	return &http.Client{
+		Timeout: 30 * time.Second,
+		Transport: &http.Transport{
+			Proxy: http.ProxyFromEnvironment,
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				conn, err := fsdialer.DialContext(ctx, network, addr)
+				if err != nil || Dumper == nil {
+					return conn, err
+				}
+				conn = fsconn.WithService("http_client", conn)
+				return fsconn.Wrap(conn, Dumper.ClientConnInterceptor()), nil
+			},
+			ForceAttemptHTTP2:     true,
+			MaxIdleConns:          10,
+			IdleConnTimeout:       10 * time.Second,
+			TLSHandshakeTimeout:   20 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: skipVerify,
+			},
 		},
-		ForceAttemptHTTP2:     true,
-		MaxIdleConns:          10,
-		IdleConnTimeout:       10 * time.Second,
-		TLSHandshakeTimeout:   20 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-	},
+	}
 }
 
 func init() {

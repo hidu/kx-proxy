@@ -5,9 +5,9 @@
 package handler
 
 import (
-	"fmt"
 	"net/http"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 
@@ -54,7 +54,7 @@ func (k *KxProxy) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 }
 
 func handlerHello(w http.ResponseWriter, r *http.Request) {
-	t, _ := links.EncryptURL(fmt.Sprintf("%d", time.Now().Unix()))
+	t, _ := links.EncryptURL(strconv.FormatInt(time.Now().Unix(), 10))
 	_, _ = w.Write([]byte(t))
 }
 

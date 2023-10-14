@@ -17,7 +17,7 @@ var homeTpl *template.Template
 var homeCode string
 
 func init() {
-	myfn := template.FuncMap{
+	myFns := template.FuncMap{
 		"selected": func(v1 string, v2 string) string {
 			if v1 == v2 {
 				return "selected"
@@ -43,7 +43,7 @@ func init() {
 			return "not"
 		},
 	}
-	tpl, err := template.New("home").Funcs(myfn).Parse(homeCode)
+	tpl, err := template.New("home").Funcs(myFns).Parse(homeCode)
 	if err != nil {
 		panic(err.Error())
 	}

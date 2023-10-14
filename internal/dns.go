@@ -13,7 +13,8 @@ import (
 	"github.com/hidu/kx-proxy/internal/dnsgroup"
 )
 
-func SetupDNS(confPath string) {
+func SetupDNS() {
+	confPath := "dns.toml"
 	if !fsconf.Exists(confPath) {
 		log.Println(confPath + " not exists, skip SetupDNS")
 		return

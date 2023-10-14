@@ -55,7 +55,7 @@ var ua = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KH
 const CacheMaxSize = 1024 * 1024
 
 func (rc *PreLoad) Fetch(pu *links.ProxyURL, preloadURL string) {
-	logData := map[string]interface{}{
+	logData := map[string]any{
 		"loaded": false,
 	}
 
@@ -78,7 +78,7 @@ func (rc *PreLoad) Fetch(pu *links.ProxyURL, preloadURL string) {
 	}
 
 	req.Header.Set("User-Agent", ua)
-	resp, err := Client.Do(req)
+	resp, err := GetClient(pu.Extension.SkipVerify()).Do(req)
 	if err != nil {
 		logData["msg"] = fmt.Sprintf("get resp failed, err=%v", err)
 		return

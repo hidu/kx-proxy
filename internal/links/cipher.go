@@ -6,6 +6,7 @@ import (
 	"crypto/md5"
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -62,7 +63,6 @@ func EncryptURL(srcURL string) (string, error) {
 
 	for i := 0; i < padLen; i++ {
 		src = append(src, byte(padLen))
-
 	}
 
 	srcLen := len(src)
@@ -80,13 +80,12 @@ func EncryptURL(srcURL string) (string, error) {
 	mode.CryptBlocks(encryptText[:srcLen], src)
 	s := base64.URLEncoding.EncodeToString(encryptText)
 	return s, nil
-
 }
 
 // DecryptURL 对url进行解密
 func DecryptURL(srcURL string) (string, error) {
 	if srcURL == "" {
-		return "", fmt.Errorf("empty url")
+		return "", errors.New("empty url")
 	}
 	src, err := base64.URLEncoding.DecodeString(srcURL)
 	if err != nil {
@@ -94,8 +93,7 @@ func DecryptURL(srcURL string) (string, error) {
 		return "", err
 	}
 	if len(src) < aes.BlockSize*2 || len(src)%aes.BlockSize != 0 {
-		return "", fmt.Errorf("wrong data size")
-
+		return "", errors.New("wrong data size")
 	}
 
 	srcLen := len(src) - aes.BlockSize
@@ -111,7 +109,7 @@ func DecryptURL(srcURL string) (string, error) {
 	paddingLen := int(decryptText[srcLen-1])
 
 	if paddingLen > 16 {
-		return "", fmt.Errorf("wrong pading size")
+		return "", errors.New("wrong pading size")
 	}
 
 	return string(decryptText[:srcLen-paddingLen]), nil
