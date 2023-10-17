@@ -4,6 +4,8 @@ import (
 	"io"
 	"net/http"
 	"strings"
+
+	"github.com/hidu/kx-proxy/internal"
 )
 
 // handle url http://aaa.com/get/?url=http://www.baidu.com/
@@ -20,7 +22,7 @@ func (k *KxProxy) handlerGet(w http.ResponseWriter, r *http.Request) {
 	}
 	addrInfo := strings.Split(r.RemoteAddr, ":")
 	req.Header.Set("HTTP_X_FORWARDED_FOR", addrInfo[0])
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := internal.GetClient(false).Do(req)
 	if err != nil {
 		w.WriteHeader(http.StatusBadGateway)
 		_, _ = w.Write([]byte(err.Error()))

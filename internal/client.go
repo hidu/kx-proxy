@@ -7,6 +7,8 @@ package internal
 import (
 	"context"
 	"crypto/tls"
+	"flag"
+	"fmt"
 	"net"
 	"net/http"
 	"time"
@@ -29,6 +31,17 @@ func GetClient(skipVerify bool) *http.Client {
 	return client1
 }
 
+var allowVisitVlan bool
+
+func init() {
+	flag.BoolVar(&allowVisitVlan, "private", false, "allow visit local network, e.g. 127.*,10.*,192.168.*")
+}
+
+func inPrivateAddr(addr net.Addr) bool {
+	ip := net.ParseIP(addr.String())
+	return ip.IsLoopback() || ip.IsPrivate()
+}
+
 func newClient(skipVerify bool) *http.Client {
 	return &http.Client{
 		Timeout: 30 * time.Second,
@@ -36,6 +49,11 @@ func newClient(skipVerify bool) *http.Client {
 			Proxy: http.ProxyFromEnvironment,
 			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 				conn, err := fsdialer.DialContext(ctx, network, addr)
+				// 禁止连接到本地 IP
+				if conn != nil && !allowVisitVlan && inPrivateAddr(conn.LocalAddr()) {
+					_ = conn.Close()
+					return nil, fmt.Errorf("forbidden, cannot connect to %s", conn.LocalAddr().String())
+				}
 				if err != nil || Dumper == nil {
 					return conn, err
 				}
