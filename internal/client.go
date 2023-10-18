@@ -50,9 +50,9 @@ func newClient(skipVerify bool) *http.Client {
 			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 				conn, err := fsdialer.DialContext(ctx, network, addr)
 				// 禁止连接到本地 IP
-				if conn != nil && !allowVisitVlan && inPrivateAddr(conn.LocalAddr()) {
+				if conn != nil && !allowVisitVlan && inPrivateAddr(conn.RemoteAddr()) {
 					_ = conn.Close()
-					return nil, fmt.Errorf("forbidden, cannot connect to %s", conn.LocalAddr().String())
+					return nil, fmt.Errorf("forbidden, cannot connect to %s", conn.RemoteAddr().String())
 				}
 				if err != nil || Dumper == nil {
 					return conn, err
