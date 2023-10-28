@@ -22,6 +22,7 @@ type ProxyURL struct {
 	Sign      int64      `json:"s"`
 	Extension Extensions `json:"x"`
 	Ref       string     `json:"r"`
+	UserCss   string     `json:"uc"` // 页面自定义的 css
 
 	ctxParams map[any]any
 }
@@ -34,6 +35,7 @@ func NewProxyURL(urlStr string, old *ProxyURL, r *http.Request) *ProxyURL {
 		Expire:    old.GetExpire(),
 		ExpireAt:  0,
 		Extension: old.Extension,
+		UserCss:   r.FormValue("ucss"),
 	}
 	pu.setSign(r)
 	pu.checkExpireAt()
@@ -130,11 +132,26 @@ func (p *ProxyURL) SwitchPath(urlPath string) {
 	p.checkExpireAt()
 }
 
+func (p *ProxyURL) ToHomeData() map[string]any {
+	datas := map[string]any{
+		"url":    p.URLStr,
+		"expire": strconv.FormatInt(p.Expire, 10),
+		"ext":    strings.Join(p.Extension, ","),
+		"uc":     p.UserCss != "",
+		"ucss":   p.UserCss,
+	}
+	return datas
+}
+
 func (p *ProxyURL) URLValues() url.Values {
 	vs := url.Values{}
 	vs.Add("url", p.URLStr)
 	vs.Add("expire", strconv.FormatInt(p.Expire, 10))
 	vs.Add("ext", strings.Join(p.Extension, ","))
+	if p.UserCss != "" {
+		vs.Add("uc", "1")
+		vs.Add("ucss", p.UserCss)
+	}
 	return vs
 }
 
@@ -172,8 +189,13 @@ func (p *ProxyURL) HeadHTML() []byte {
 		bf.WriteString(`">`)
 
 		bf.WriteString(`&nbsp;<a class='raw_url' href="/?`)
-		raw := p.URLValues().Encode()
-		bf.WriteString(raw)
+
+		u, _ := p.Encode()
+		uv := url.Values{}
+		uv.Add("raw", u)
+		// raw := p.URLValues().Encode()
+		// bf.WriteString(raw)
+		bf.WriteString(uv.Encode())
 		bf.WriteString(`">`)
 		bf.WriteString("Home")
 		bf.WriteString("</a>")

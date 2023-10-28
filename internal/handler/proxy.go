@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/md5"
 	"fmt"
+	"html"
 	"io"
 	"log"
 	"net/http"
@@ -303,10 +304,10 @@ func (d *DoProxy) reWriteHTML(r *http.Request, resp *internal.Response, pu *link
 		hBuf.Write(hdCode)
 	}
 
-	ucss := d.userCSS(pu)
+	ucss := d.userCSSLink(pu)
 	hBuf.WriteString(ucss)
 
-	if ujs := d.userJS(pu); len(ujs) > 0 {
+	if ujs := d.userJSLink(pu); len(ujs) > 0 {
 		hBuf.WriteString(ujs)
 	}
 
@@ -314,11 +315,15 @@ func (d *DoProxy) reWriteHTML(r *http.Request, resp *internal.Response, pu *link
 
 	hBuf.WriteString(ucss)
 
+	if uc := d.userCSS(pu); uc != "" {
+		hBuf.WriteString(uc)
+	}
+
 	resp.Body = hBuf.Bytes()
 	return resp
 }
 
-func (d *DoProxy) userCSS(pu *links.ProxyURL) string {
+func (d *DoProxy) userCSSLink(pu *links.ProxyURL) string {
 	if !pu.Extension.Has("ucss") {
 		return ""
 	}
@@ -341,7 +346,14 @@ func (d *DoProxy) userCSS(pu *links.ProxyURL) string {
 	return buf.String()
 }
 
-func (d *DoProxy) userJS(pu *links.ProxyURL) string {
+func (d *DoProxy) userCSS(pu *links.ProxyURL) string {
+	if pu.UserCss == "" {
+		return ""
+	}
+	return `<style type="text/css">` + html.EscapeString(pu.UserCss) + "</style>\n"
+}
+
+func (d *DoProxy) userJSLink(pu *links.ProxyURL) string {
 	if !pu.Extension.Has("ucss") {
 		return ""
 	}

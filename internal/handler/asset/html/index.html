@@ -59,7 +59,13 @@
 						<input type="text" name="more" value="{{.more}}" class="form-control" title="extension params">
 					</span>
 					{{end}}
-						
+
+					{{ if .uc}}
+					<span>
+						<textarea name="ucss" class="form-control" title="user css">{{.ucss}}</textarea>
+					</span>
+					{{end}}
+
 					<span class="input-group-btn">
 						<button type="submit" class="btn btn-default btn-yellow">go &rarr;</button>
 					</span>

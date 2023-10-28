@@ -61,16 +61,14 @@ func (k *KxProxy) handlerHome(w http.ResponseWriter, r *http.Request) {
 		k.handlerHomePost(w, r)
 		return
 	}
+	datas := map[string]any{}
 
-	qs := r.URL.Query()
-	datas := map[string]any{
-		"url":    qs.Get("url"),
-		"expire": qs.Get("expire"),
-		"ext":    qs.Get("ext"),
-	}
-	if qs.Get("mp") != "" {
-		datas["mp"] = true
-		datas["more"] = qs.Get("more")
+	raw := r.URL.Query().Get("raw")
+	if raw != "" {
+		pu, _ := links.DecodeProxyURL(raw)
+		if pu != nil {
+			datas = pu.ToHomeData()
+		}
 	}
 	_ = homeTpl.Execute(w, datas)
 }
