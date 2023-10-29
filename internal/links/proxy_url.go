@@ -137,22 +137,10 @@ func (p *ProxyURL) ToHomeData() map[string]any {
 		"url":    p.URLStr,
 		"expire": strconv.FormatInt(p.Expire, 10),
 		"ext":    strings.Join(p.Extension, ","),
-		"uc":     p.UserCss != "",
+		"mp":     p.UserCss != "",
 		"ucss":   p.UserCss,
 	}
 	return datas
-}
-
-func (p *ProxyURL) URLValues() url.Values {
-	vs := url.Values{}
-	vs.Add("url", p.URLStr)
-	vs.Add("expire", strconv.FormatInt(p.Expire, 10))
-	vs.Add("ext", strings.Join(p.Extension, ","))
-	if p.UserCss != "" {
-		vs.Add("uc", "1")
-		vs.Add("ucss", p.UserCss)
-	}
-	return vs
 }
 
 func (p *ProxyURL) CacheAble() bool {

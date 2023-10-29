@@ -18,7 +18,7 @@
 				<div class="input-group">
 					<input type="text" required class="form-control" name="url" 
 						pattern="^(http[s]?)://.+"
-						placeholder="http://example.com/" value="{{.url}}"> 
+						placeholder="https://example.com/" value="{{.url}}">
 					<span class="input-group-btn select_expire"> 
 						<select name='expire' class="form-control" title="cache">
 							<option value='0' {{.expire|selected "0"}}>Expire : No</option>
@@ -33,7 +33,7 @@
 							<option value='2592000' {{.expire|selected "2592000"}}>30 days</option>
 						</select>
 					</span>
-					<span class="input-group-btn select_expire select_ext">
+					<span class="input-group-addon select_expire select_ext">
 						<select name='ext' class="form-control "  size="1" multiple="multiple">
 							<option value=''>Extension:No</option>
 							<option value='no_images' {{.ext|selected "no_images"}}>No Images</option>
@@ -54,22 +54,29 @@
 							<option value='no_cache' {{.ext|selected "no_cache"}}>No Cache</option>
 						</select>
 					</span>
-					{{ if .mp}}
-					<span>
-						<input type="text" name="more" value="{{.more}}" class="form-control" title="extension params">
-					</span>
+					{{ if not .mp}}
+						<span class="input-group-btn">
+							<button type="submit" class="btn btn-default btn-yellow">go &rarr;</button>
+						</span>
 					{{end}}
-
-					{{ if .uc}}
-					<span>
-						<textarea name="ucss" class="form-control" title="user css">{{.ucss}}</textarea>
+				</div>
+				{{ if .mp}}
+				<div class="input-group">
+					<span class="input-group-btn">
+						<input type="text" name="more" value="{{.more}}" class="form-control" placeholder="extension params">
 					</span>
-					{{end}}
-
+				</div>
+				<div class="input-group">
+					<span class="input-group-btn">
+						<textarea name="ucss" class="form-control" placeholder="user css">{{.ucss}}</textarea>
+					</span>
+				</div>
+				<div class="input-group">
 					<span class="input-group-btn">
 						<button type="submit" class="btn btn-default btn-yellow">go &rarr;</button>
 					</span>
 				</div>
+				{{end}}
 			</form>
 		</div>
 	</div>
