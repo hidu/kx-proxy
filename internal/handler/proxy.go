@@ -319,9 +319,21 @@ func (d *DoProxy) reWriteHTML(r *http.Request, resp *internal.Response, pu *link
 		hBuf.WriteString(uc)
 	}
 
+	if pu.Extension.InverseColor() {
+		hBuf.WriteString(inverseColor)
+	}
+
 	resp.Body = hBuf.Bytes()
 	return resp
 }
+
+const inverseColor = `
+<style>
+html {
+  filter: invert(1) hue-rotate(180deg) !important;
+}
+</style>
+`
 
 func (d *DoProxy) userCSSLink(pu *links.ProxyURL) string {
 	if !pu.Extension.Has("ucss") {

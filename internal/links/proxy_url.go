@@ -292,6 +292,10 @@ func (es Extensions) SkipVerify() bool {
 	return es.Has("SkipVerify")
 }
 
+func (es Extensions) InverseColor() bool {
+	return es.Has("ic")
+}
+
 func (es Extensions) Timeout() time.Duration {
 	if es.Has("tl_30") {
 		return 30 * time.Second
