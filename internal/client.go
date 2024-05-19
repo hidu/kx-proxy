@@ -44,7 +44,7 @@ func inPrivateAddr(addr net.Addr) bool {
 
 func newClient(skipVerify bool) *http.Client {
 	return &http.Client{
-		Timeout: 30 * time.Second,
+		Timeout: 3 * time.Minute,
 		Transport: &http.Transport{
 			Proxy: http.ProxyFromEnvironment,
 			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
@@ -61,7 +61,7 @@ func newClient(skipVerify bool) *http.Client {
 				return fsconn.Wrap(conn, Dumper.ClientConnInterceptor()), nil
 			},
 			ForceAttemptHTTP2:     true,
-			MaxIdleConns:          10,
+			MaxIdleConns:          2,
 			IdleConnTimeout:       10 * time.Second,
 			TLSHandshakeTimeout:   20 * time.Second,
 			ExpectContinueTimeout: 1 * time.Second,

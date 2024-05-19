@@ -6,6 +6,7 @@ package internal
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -78,9 +79,21 @@ func (rc *PreLoad) Fetch(pu *links.ProxyURL, preloadURL string) {
 	}
 
 	req.Header.Set("User-Agent", ua)
-	resp, err := GetClient(pu.Extension.SkipVerify()).Do(req)
+
+	var errs []error
+	var resp *http.Response
+	tryTotal := pu.Extension.TryTotal()
+	for try := 0; try < tryTotal; try++ {
+		logData["try"] = try + 1
+		resp, err = GetClient(pu.Extension.SkipVerify()).Do(req)
+		if err == nil {
+			break
+		}
+		errs = append(errs, err)
+	}
+
 	if err != nil {
-		logData["msg"] = fmt.Sprintf("get resp failed, err=%v", err)
+		logData["msg"] = fmt.Sprintf("get resp failed try=%d, errs=%v", tryTotal, errors.Join(errs...))
 		return
 	}
 

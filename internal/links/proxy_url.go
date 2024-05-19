@@ -297,6 +297,9 @@ func (es Extensions) InverseColor() bool {
 }
 
 func (es Extensions) Timeout() time.Duration {
+	if es.Has("tl_60") {
+		return 60 * time.Second
+	}
 	if es.Has("tl_30") {
 		return 30 * time.Second
 	}
@@ -307,6 +310,16 @@ func (es Extensions) Timeout() time.Duration {
 		return 5 * time.Second
 	}
 	return 0
+}
+
+func (es Extensions) TryTotal() int {
+	if es.Has("retry_2") {
+		return 3
+	}
+	if es.Has("retry_1") {
+		return 2
+	}
+	return 1
 }
 
 var noJSReg = regexp.MustCompile(`(?is)<script.+?<\s*/\s*script>`)

@@ -162,6 +162,10 @@ func (d *DoProxy) do(ctx context.Context, w http.ResponseWriter, r *http.Request
 		logData["save_cache"] = cached
 	}
 
+	if pu.Extension.NoCache() {
+		fileCache.Del(pu.GetURLStr())
+	}
+
 	inm := r.Header.Get("If-None-Match")
 
 	var wrote int64
@@ -197,7 +201,14 @@ func (d *DoProxy) directGet(ctx context.Context, r *http.Request, pu *links.Prox
 	}
 	req.Header.Set("Content-Type", r.Header.Get("Content-Type"))
 	req.Header.Set("User-Agent", r.Header.Get("User-Agent"))
-	resp, err1 := internal.GetClient(pu.Extension.SkipVerify()).Do(req)
+	var resp *http.Response
+	var err1 error
+	for try := 0; try < pu.Extension.TryTotal(); try++ {
+		resp, err1 = internal.GetClient(pu.Extension.SkipVerify()).Do(req)
+		if err1 == nil {
+			break
+		}
+	}
 	if err1 != nil {
 		return nil, err1
 	}
@@ -330,6 +341,7 @@ func (d *DoProxy) reWriteHTML(r *http.Request, resp *internal.Response, pu *link
 const inverseColor = `
 <style>
 html {
+  background: white !important;
   filter: invert(1) hue-rotate(180deg) !important;
 }
 </style>
