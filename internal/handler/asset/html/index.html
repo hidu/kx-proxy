@@ -39,22 +39,22 @@
 							<option value='no_images' {{.ext|selected "no_images"}}>No Images</option>
 							<option value='no_js' {{.ext|selected_def "no_js"}}>No JS</option>
 							<option value='no_css' {{.ext|selected "no_css"}}>No Css</option>
-							<option value='cache' {{.ext|selected "cache"}}>Cache</option>
-							<option value='cache_static' {{.ext|selected "cache_static"}}>Cache Static</option>
+							<option value='cache' {{.ext|selected "cache"}}>Cache All</option>
+							<option value='cache_static' {{.ext|selected "cache_st"}}>Cache Only Static</option>
+							<option value='no_cache' {{.ext|selected "no_cache"}}>No Cache</option>
 							<option value='clean' {{.ext|selected_def "clean"}}>Clean</option>
-							<option value='SkipVerify' {{.ext|selected_def "InsecureSkipVerify"}}>InsecureSkipVerify</option>
+							<option value='SkipVerify' {{.ext|selected_def "SkipVerify"}}>Insecure Skip</option>
 							<option value='raw_url' {{.ext|selected_def "raw_url"}}>Raw URL</option>
 							<option value='ucss' {{.ext|selected_def "ucss"}}>Custom js/Css</option>
-							<option value='pre_next' {{.ext|selected_def "pre_next"}}>Preloading Next</option>
-							<option value='pre_sd' {{.ext|selected "pre_sd"}}>Preloading Same Dir</option>
-							<option value='pre' {{.ext|selected "pre"}}>Preloading All</option>
+							<option value='pre_next' {{.ext|selected_def "pre_next"}}>Preload Next</option>
+							<option value='pre_sd' {{.ext|selected "pre_sd"}}>Preload Same Dir</option>
+							<option value='pre' {{.ext|selected "pre"}}>Preload All</option>
 							<option value='tl_5' {{.ext|selected "tl_5"}}>Timeout 5s</option>
 							<option value='tl_10' {{.ext|selected_def "tl_10"}}>Timeout 10s</option>
 							<option value='tl_30' {{.ext|selected "tl_30"}}>Timeout 30s</option>
 							<option value='tl_60' {{.ext|selected "tl_60"}}>Timeout 60s</option>
 							<option value='retry_1' {{.ext|selected "retry_1"}}>Retry 1</option>
 							<option value='retry_2' {{.ext|selected "retry_2"}}>Retry 2</option>
-							<option value='no_cache' {{.ext|selected "no_cache"}}>No Cache</option>
 							<option value='ic' {{.ext|selected "ic"}}>Inverse Color</option>
 						</select>
 					</span>

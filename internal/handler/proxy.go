@@ -105,6 +105,11 @@ func getLogData(ctx context.Context) internal.LogData {
 }
 
 func (d *DoProxy) do(ctx context.Context, w http.ResponseWriter, r *http.Request, pu *links.ProxyURL) {
+	defer func() {
+		if re := recover(); re != nil {
+			d.errorPage(pu, w, fmt.Sprintf("panic: %v", re), http.StatusBadGateway)
+		}
+	}()
 	urlString := pu.GetURLStr()
 	logData := getLogData(ctx)
 
@@ -115,7 +120,6 @@ func (d *DoProxy) do(ctx context.Context, w http.ResponseWriter, r *http.Request
 	}
 
 	fromCache := resp != nil
-
 	logData["from_cache"] = fromCache
 
 	if resp == nil {
@@ -126,6 +130,7 @@ func (d *DoProxy) do(ctx context.Context, w http.ResponseWriter, r *http.Request
 			d.errorPage(pu, w, "Error Fetching "+urlString+"\n"+err.Error(), http.StatusBadGateway)
 			return
 		}
+		logData["ct"] = resp.ContentType
 	}
 
 	logData["resp_status"] = resp.StatusCode
@@ -162,7 +167,7 @@ func (d *DoProxy) do(ctx context.Context, w http.ResponseWriter, r *http.Request
 		logData["save_cache"] = cached
 	}
 
-	if pu.Extension.NoCache() {
+	if pu.NoCache() {
 		fileCache.Del(pu.GetURLStr())
 	}
 

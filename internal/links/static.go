@@ -8,11 +8,17 @@ import (
 	"strings"
 )
 
-var staticExts = []string{".png", ".jpg", ".jpeg", ".gif", ".css", ".js", ".woff2"}
+var staticExts = []string{
+	".png", ".jpg", ".jpeg", ".gif", ".bmp",
+	".css", ".js", ".svg",
+	".ttf", ".woff", ".woff2",
+	".ico",
+}
 
 func IsStaticPath(path string) bool {
+	prefix, _, _ := strings.Cut(path, "?")
 	for _, e := range staticExts {
-		if strings.HasSuffix(path, e) {
+		if strings.HasSuffix(prefix, e) {
 			return true
 		}
 	}

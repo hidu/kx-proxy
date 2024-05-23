@@ -144,11 +144,7 @@ func (p *ProxyURL) ToHomeData() map[string]any {
 }
 
 func (p *ProxyURL) CacheAble() bool {
-	if val := p.GetCtxParams(ctxParamsKeyNoCache); val != nil {
-		return false
-	}
-
-	if p.Extension.NoCache() {
+	if p.NoCache() {
 		return false
 	}
 	if p.Extension.Cache() {
@@ -158,6 +154,13 @@ func (p *ProxyURL) CacheAble() bool {
 		return true
 	}
 	return false
+}
+
+func (p *ProxyURL) NoCache() bool {
+	if val := p.GetCtxParams(ctxParamsKeyNoCache); val != nil {
+		return true
+	}
+	return p.Extension.NoCache()
 }
 
 func emptyFunc() {}
