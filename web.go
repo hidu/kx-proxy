@@ -29,8 +29,8 @@ var alog = flag.String("log", "./log/kx.log", "log file. value 'stderr' to stder
 var rpcdump = flag.Bool("rpcdump", false, "enable rpcdump")
 
 func setupEnv() {
-	fsenv.SetConfRootDir(*confDir)
-	fsenv.SetDataRootDir(*dataDir)
+	fsenv.SetConfDir(*confDir)
+	fsenv.SetDataDir(*dataDir)
 }
 
 func main() {
@@ -75,7 +75,7 @@ func setupRPCDump(l net.Listener) net.Listener {
 	if !*rpcdump {
 		return l
 	}
-	dumpDir := filepath.Join(fsenv.DataRootDir(), "rpcdump")
+	dumpDir := filepath.Join(fsenv.DataDir(), "rpcdump")
 	log.Println("rpcdump is enable, export dir:", dumpDir)
 	dm := &conndump.Dumper{
 		DataDir: dumpDir,
