@@ -443,7 +443,7 @@ func staticCacheTime(resp *internal.Response) time.Duration {
 //
 //	eg: /ucss/all.css, /ucss/all.js
 func hasUserFile(name string) string {
-	fp := filepath.Join(fsenv.ConfRootDir(), name)
+	fp := filepath.Join(fsenv.ConfDir(), name)
 	info, err := os.Stat(fp)
 	if err != nil {
 		return ""

@@ -21,7 +21,7 @@ func (k *KxProxy) handlerUserCSS(w http.ResponseWriter, r *http.Request) {
 		http.NotFoundHandler().ServeHTTP(w, r)
 		return
 	}
-	ucssDir := filepath.Join(fsenv.ConfRootDir(), "ucss")
+	ucssDir := filepath.Join(fsenv.ConfDir(), "ucss")
 	http.StripPrefix("/ucss/", http.FileServer(http.Dir(ucssDir))).ServeHTTP(w, r)
 }
 

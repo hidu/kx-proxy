@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/fsgo/fsconf/confext"
 	"github.com/fsgo/fsenv"
 	"github.com/fsgo/fsgo/fsfs"
 	"github.com/fsgo/fsgo/fsnet/fsconn/conndump"
@@ -20,6 +21,10 @@ import (
 	"github.com/hidu/kx-proxy/internal"
 	"github.com/hidu/kx-proxy/internal/handler"
 )
+
+func init() {
+	confext.Init()
+}
 
 var addr = flag.String("addr", "127.0.0.1:8085", "listen addr,eg :8085")
 var confDir = flag.String("conf", "./conf", "config dir")

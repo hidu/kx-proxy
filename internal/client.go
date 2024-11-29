@@ -38,7 +38,11 @@ func init() {
 }
 
 func inPrivateAddr(addr net.Addr) bool {
-	ip := net.ParseIP(addr.String())
+	host, _, err := net.SplitHostPort(addr.String())
+	if err != nil {
+		return true
+	}
+	ip := net.ParseIP(host)
 	return ip.IsLoopback() || ip.IsPrivate()
 }
 
