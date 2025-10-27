@@ -6,4 +6,4 @@ DataDir: "{env.DataDir}"
 RunMode: "debug"
 
 Other:
-  SecretKey: "{env.SecretKey|62826f9fd2da8c2ab3f30d8533102476}"  # 加密秘钥，可选
+  SecretKey: "{env.SecretKey|5a5253212cd65fb2926b330d84cd487b}"  # 加密秘钥，可选
