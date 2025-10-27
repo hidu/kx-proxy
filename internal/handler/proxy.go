@@ -11,11 +11,11 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
-	"github.com/fsgo/fsenv"
+	"github.com/xanygo/anygo/xattr"
+	"github.com/xanygo/anygo/xhttp"
 
 	"github.com/hidu/kx-proxy/internal"
 	"github.com/hidu/kx-proxy/internal/links"
@@ -37,7 +37,7 @@ func (d *DoProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	reqStart := time.Now()
 	defer func() {
 		used := time.Since(reqStart)
-		log.Println("remote:", r.RemoteAddr, "path:", r.URL.Path, "used:", used, logData)
+		log.Println("remote:", r.RemoteAddr, "path:", r.URL.Path, "cost:", used, logData)
 	}()
 
 	r.Header.Del("Connection")
@@ -50,19 +50,20 @@ func (d *DoProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	urlString := pu.GetURLStr()
+	logData["ID"] = pu.ID
 
 	// 检查url是否过期
 	if pu.IsExpire() {
-		d.errorPage(pu, w, "expired", http.StatusBadRequest)
+		xhttp.Error(w, r, http.StatusBadRequest, "", "url expired")
 		return
 	}
 
 	if !pu.CheckSign(r) {
-		d.errorPage(pu, w, "sign not match", http.StatusBadRequest)
+		xhttp.Error(w, r, http.StatusBadRequest, "", "invalid sign")
 		return
 	}
 
-	logData["visit_url"] = urlString
+	logData["origin"] = urlString
 
 	if r.URL.Query().Get("cache") == "no" {
 		pu.SetNoCache()
@@ -73,25 +74,6 @@ func (d *DoProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx = context.WithValue(ctx, ctxKeyLogData, logData)
 
 	d.do(ctx, w, r, pu)
-}
-
-func (d *DoProxy) errorPage(pu *links.ProxyURL, w http.ResponseWriter, error string, code int) {
-	var bf bytes.Buffer
-	bf.WriteString(`<html>
-<head>
-	<title>Error ` + strconv.Itoa(code) + `</title>
-</head>
-<body>
-`)
-	bf.Write(pu.HeadHTML())
-	bf.WriteString(error)
-	bf.WriteString("\n</body>\n</html>")
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	code = 200 // 部分浏览器非 200 状态不展现页面内容
-	w.WriteHeader(code)
-	fmt.Fprintln(w, bf.String())
 }
 
 type ctxKeyType uint8
@@ -107,7 +89,7 @@ func getLogData(ctx context.Context) internal.LogData {
 func (d *DoProxy) do(ctx context.Context, w http.ResponseWriter, r *http.Request, pu *links.ProxyURL) {
 	defer func() {
 		if re := recover(); re != nil {
-			d.errorPage(pu, w, fmt.Sprintf("panic: %v", re), http.StatusBadGateway)
+			xhttp.Error(w, r, http.StatusInternalServerError, "", fmt.Sprintf("panic: %v", re))
 		}
 	}()
 	urlString := pu.GetURLStr()
@@ -127,7 +109,7 @@ func (d *DoProxy) do(ctx context.Context, w http.ResponseWriter, r *http.Request
 		resp, err = d.directGet(ctx, r, pu)
 		if err != nil {
 			logData["emsg"] = "fetch_failed:" + err.Error()
-			d.errorPage(pu, w, "Error Fetching "+urlString+"\n"+err.Error(), http.StatusBadGateway)
+			xhttp.Error(w, r, http.StatusBadGateway, "", "Fetching "+urlString+": "+err.Error())
 			return
 		}
 		logData["ct"] = resp.ContentType
@@ -138,7 +120,7 @@ func (d *DoProxy) do(ctx context.Context, w http.ResponseWriter, r *http.Request
 	rg, err := d.redirect(resp, pu)
 	if err != nil {
 		logData["emsg"] = "redirect_failed:" + err.Error()
-		d.errorPage(pu, w, "Error Redirect "+urlString+"\n"+err.Error(), http.StatusBadGateway)
+		xhttp.Error(w, r, http.StatusBadGateway, "", "Redirect "+urlString+": "+err.Error())
 		return
 	}
 
@@ -443,7 +425,7 @@ func staticCacheTime(resp *internal.Response) time.Duration {
 //
 //	eg: /ucss/all.css, /ucss/all.js
 func hasUserFile(name string) string {
-	fp := filepath.Join(fsenv.ConfDir(), name)
+	fp := filepath.Join(xattr.ConfDir(), name)
 	info, err := os.Stat(fp)
 	if err != nil {
 		return ""

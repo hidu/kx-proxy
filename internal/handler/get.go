@@ -2,6 +2,7 @@ package handler
 
 import (
 	"io"
+	"net"
 	"net/http"
 	"strings"
 
@@ -20,8 +21,8 @@ func (k *KxProxy) handlerGet(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(err.Error()))
 		return
 	}
-	addrInfo := strings.Split(r.RemoteAddr, ":")
-	req.Header.Set("HTTP_X_FORWARDED_FOR", addrInfo[0])
+	host, _, _ := net.SplitHostPort(r.RemoteAddr)
+	req.Header.Set("HTTP_X_FORWARDED_FOR", host)
 	resp, err := internal.GetClient(false).Do(req)
 	if err != nil {
 		w.WriteHeader(http.StatusBadGateway)

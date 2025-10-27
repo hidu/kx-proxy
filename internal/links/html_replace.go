@@ -96,7 +96,7 @@ func HTMLURLReplace(body []byte, urlString string, pu *ProxyURL, r *http.Request
 
 // CSSURLReplace 对css内容中的url替换为代理的地址
 func CSSURLReplace(body []byte, urlString string, pu *ProxyURL, r *http.Request) []byte {
-	baseHref := ""
+	var baseHref string
 	return reCSS.ReplaceAllFunc(body, func(s []byte) []byte {
 		parts := reCSS.FindSubmatchIndex(s)
 		if parts != nil {

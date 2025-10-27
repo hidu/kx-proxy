@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -23,11 +24,14 @@ type ProxyURL struct {
 	Extension Extensions `json:"x"`
 	Ref       string     `json:"r"`
 	UserCss   string     `json:"uc"` // 页面自定义的 css
+	ID        int64      `json:"i"`
 
 	ctxParams map[any]any
 }
 
-const _URLStopChar = '.'
+var globalID atomic.Int64
+
+const _URLStopChar = ".jsp"
 
 func NewProxyURL(urlStr string, old *ProxyURL, r *http.Request) *ProxyURL {
 	pu := &ProxyURL{
@@ -36,6 +40,7 @@ func NewProxyURL(urlStr string, old *ProxyURL, r *http.Request) *ProxyURL {
 		ExpireAt:  0,
 		Extension: old.Extension,
 		UserCss:   r.FormValue("ucss"),
+		ID:        globalID.Add(1),
 	}
 	pu.setSign(r)
 	pu.checkExpireAt()
@@ -114,7 +119,7 @@ func (p *ProxyURL) Encode() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("build url failed: %w", err)
 	}
-	return fmt.Sprintf("%s%c", encodedURL, _URLStopChar), nil
+	return encodedURL + _URLStopChar, nil
 }
 
 func (p *ProxyURL) SwitchURL(urlNew string) {
@@ -220,7 +225,7 @@ func DecodeProxyURL(encodedURL string) (p *ProxyURL, err error) {
 		return nil, errors.New("path is too short")
 	}
 
-	arr := strings.SplitN(encodedURL, string(_URLStopChar), 2)
+	arr := strings.SplitN(encodedURL, _URLStopChar, 2)
 	if len(arr) != 2 {
 		return nil, errors.New("invalid encodedURL")
 	}

@@ -6,7 +6,7 @@ Timeout = 1000
 
 [[NameServer]]
 Name = "Default"
-Hosts = ["1.1.1.1"]
+Hosts = ["1.1.1.1:53"]
 # 超时时间，可选，默认为 200
 Timeout = 500
 # 哪些域名使用这组 NS 解析，可选，
@@ -16,5 +16,5 @@ Domains = []
 
 [[NameServer]]
 Name = "114"
-Hosts = ["114.114.114.114"]
+Hosts = ["114.114.114.114:53"]
 Domains = ["*.cn"]

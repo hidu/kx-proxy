@@ -5,11 +5,12 @@ import (
 	"crypto/cipher"
 	"crypto/md5"
 	"crypto/rand"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
 	"log"
+
+	"github.com/xanygo/anygo/xcodec/xbase"
 )
 
 const (
@@ -34,7 +35,7 @@ func CipherStreamWrite(skey string, encodeURL string, writer io.Writer) *cipher.
 		panic(err)
 	}
 	var iv [aes.BlockSize]byte
-	stream := cipher.NewOFB(block, iv[:])
+	stream := cipher.NewCTR(block, iv[:])
 	return &cipher.StreamWriter{S: stream, W: writer}
 }
 
@@ -46,7 +47,7 @@ func CipherStreamReader(skey string, encodeURL string, reader io.Reader) *cipher
 		panic(err)
 	}
 	var iv [aes.BlockSize]byte
-	stream := cipher.NewOFB(block, iv[:])
+	stream := cipher.NewCTR(block, iv[:])
 	return &cipher.StreamReader{S: stream, R: reader}
 }
 
@@ -78,7 +79,7 @@ func EncryptURL(srcURL string) (string, error) {
 	mode := cipher.NewCBCEncrypter(aesBlock, iv)
 
 	mode.CryptBlocks(encryptText[:srcLen], src)
-	s := base64.URLEncoding.EncodeToString(encryptText)
+	s := xbase.Base58.EncodeToString(encryptText)
 	return s, nil
 }
 
@@ -87,7 +88,7 @@ func DecryptURL(srcURL string) (string, error) {
 	if srcURL == "" {
 		return "", errors.New("empty url")
 	}
-	src, err := base64.URLEncoding.DecodeString(srcURL)
+	src, err := xbase.Base58.DecodeString(srcURL)
 	if err != nil {
 		log.Println("base64_decode_failed:", err.Error(), "data:", srcURL[1:])
 		return "", err

@@ -2,11 +2,14 @@ package handler
 
 import (
 	_ "embed" // for asset file
+	"fmt"
 	"html/template"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
+
+	"github.com/xanygo/anygo/xhttp"
 
 	"github.com/hidu/kx-proxy/internal/links"
 )
@@ -81,8 +84,7 @@ func (k *KxProxy) handlerHome(w http.ResponseWriter, r *http.Request) {
 
 func (k *KxProxy) handlerHomePost(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		w.WriteHeader(400)
-		_, _ = w.Write([]byte("ParseForm failed:" + err.Error()))
+		xhttp.Error(w, r, http.StatusBadRequest, "", err.Error())
 		return
 	}
 	enteredURL := r.FormValue("url")
@@ -93,14 +95,13 @@ func (k *KxProxy) handlerHomePost(w http.ResponseWriter, r *http.Request) {
 
 	validURL, err := url.Parse(enteredURL)
 	if err != nil {
-		w.WriteHeader(400)
-		_, _ = w.Write([]byte("Parse url failed:" + err.Error()))
+		xhttp.Error(w, r, http.StatusBadRequest, "", err.Error())
 		return
 	}
 
 	// prepend http if not specified
 	if validURL.Scheme != "http" && validURL.Scheme != "https" {
-		_, _ = w.Write([]byte("invalid Scheme: " + validURL.Scheme))
+		xhttp.Error(w, r, http.StatusBadRequest, "", fmt.Sprintf("invalid Scheme %q in %q", validURL.Scheme, enteredURL))
 		return
 	}
 
@@ -114,7 +115,7 @@ func (k *KxProxy) handlerHomePost(w http.ResponseWriter, r *http.Request) {
 	pu := links.NewProxyURL(validURL.String(), opu, r)
 	encodedURL, err := pu.Encode()
 	if err != nil {
-		_, _ = w.Write([]byte("build url failed:" + err.Error()))
+		xhttp.TextError(w, r, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	http.Redirect(w, r, "/p/"+encodedURL, http.StatusFound)

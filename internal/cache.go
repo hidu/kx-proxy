@@ -8,8 +8,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/fsgo/fscache"
-	"github.com/fsgo/fscache/filecache"
+	"github.com/xanygo/anygo/store/xcache"
+	"github.com/xanygo/anygo/xcodec"
 )
 
 type CacheData struct {
@@ -27,34 +27,22 @@ func (cd *CacheData) ContentType() ContentType {
 var defaultTTL = 30 * 24 * time.Hour
 
 func NewFileCache(dir string) *FileCache {
-	opt := &filecache.Option{
-		Dir:        dir,
-		GCInterval: time.Minute,
-	}
-	fc, err := filecache.New(opt)
-	if err != nil {
-		panic(err.Error())
-	}
 	return &FileCache{
-		cache: fc,
+		cache: &xcache.File[string, *CacheData]{
+			Dir:   dir,
+			Codec: xcodec.JSON,
+			GC:    time.Minute,
+		},
 	}
 }
 
 type FileCache struct {
-	cache fscache.Cache
+	cache *xcache.File[string, *CacheData]
 }
 
 func (fc *FileCache) Get(key string) *CacheData {
-	ret := fc.cache.Get(context.Background(), key)
-	if ret.Err != nil {
-		return nil
-	}
-	var cd *CacheData
-	has, err := ret.Value(&cd)
-	if !has || err != nil {
-		return nil
-	}
-	return cd
+	val, _ := fc.cache.Get(context.Background(), key)
+	return val
 }
 
 func (fc *FileCache) Set(key string, data *CacheData) {
@@ -70,6 +58,5 @@ func (fc *FileCache) Del(key string) {
 }
 
 func (fc *FileCache) Has(key string) bool {
-	ret := fc.cache.Has(context.Background(), key)
-	return ret.Has
+	return fc.Get(key) != nil
 }

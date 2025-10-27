@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/fsgo/fsenv"
+	"github.com/xanygo/anygo/xattr"
 )
 
 //go:embed asset
@@ -21,7 +21,7 @@ func (k *KxProxy) handlerUserCSS(w http.ResponseWriter, r *http.Request) {
 		http.NotFoundHandler().ServeHTTP(w, r)
 		return
 	}
-	ucssDir := filepath.Join(fsenv.ConfDir(), "ucss")
+	ucssDir := filepath.Join(xattr.ConfDir(), "ucss")
 	http.StripPrefix("/ucss/", http.FileServer(http.Dir(ucssDir))).ServeHTTP(w, r)
 }
 

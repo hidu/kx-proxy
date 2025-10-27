@@ -12,10 +12,10 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/fsgo/fsgo/fsnet/fsresolver"
+	"github.com/xanygo/anygo/xnet"
 )
 
-var _ fsresolver.Resolver = (*ResolverGroup)(nil)
+var _ xnet.Resolver = (*ResolverGroup)(nil)
 
 type ResolverGroup struct {
 	Config *Config
@@ -34,22 +34,16 @@ func (r *ResolverGroup) LookupIP(ctx context.Context, network, host string) ([]n
 	return r.find(host).LookupIP(ctx, network, host)
 }
 
-func (r *ResolverGroup) LookupIPAddr(ctx context.Context, host string) ([]net.IPAddr, error) {
-	ctx, cancel := context.WithTimeout(ctx, r.getTimeout())
-	defer cancel()
-	return r.find(host).LookupIPAddr(ctx, host)
-}
-
 func (r *ResolverGroup) find(host string) resolvers {
 	return r.Config.findResolvers(host)
 }
 
-var _ fsresolver.Resolver = (*resolver)(nil)
+var _ xnet.Resolver = (*resolver)(nil)
 
 type resolver struct {
 	Name       string
 	Timeout    int
-	Resolver   fsresolver.Resolver
+	Resolver   xnet.Resolver
 	DomainRule []*regexp.Regexp
 }
 
@@ -85,42 +79,21 @@ func (r *resolver) LookupIP(ctx context.Context, network, host string) (ret []ne
 	return ret, err
 }
 
-func (r *resolver) LookupIPAddr(ctx context.Context, host string) ([]net.IPAddr, error) {
-	ctx, cancel := context.WithTimeout(ctx, r.getTimeout())
-	defer cancel()
-	ret, err := r.Resolver.LookupIPAddr(ctx, host)
-	if err != nil {
-		err = fmt.Errorf("%w NS=%s", err, r.Name)
-	}
-	return ret, err
-}
-
-var _ fsresolver.Resolver = (*resolvers)(nil)
+var _ xnet.Resolver = (*resolvers)(nil)
 
 type resolvers []*resolver
 
-func (rs resolvers) LookupIP(ctx context.Context, network, host string) ([]net.IP, error) {
+func (rs resolvers) LookupIP(ctx context.Context, network, host string) (val []net.IP, err error) {
 	for _, r := range rs {
-		val, err := r.LookupIP(ctx, network, host)
+		select {
+		case <-ctx.Done():
+			return nil, context.Cause(ctx)
+		default:
+		}
+		val, err = r.LookupIP(ctx, network, host)
 		if err == nil {
 			return val, nil
 		}
-		if ctx.Err() != nil {
-			return nil, err
-		}
 	}
-	return nil, fmt.Errorf(" all %d resolver LookupIP failed", len(rs))
-}
-
-func (rs resolvers) LookupIPAddr(ctx context.Context, host string) ([]net.IPAddr, error) {
-	for _, r := range rs {
-		val, err := r.LookupIPAddr(ctx, host)
-		if err == nil {
-			return val, nil
-		}
-		if ctx.Err() != nil {
-			return nil, err
-		}
-	}
-	return nil, fmt.Errorf(" all %d resolver LookupIPAddr failed", len(rs))
+	return nil, fmt.Errorf(" all %d resolver LookupIP failed, %w", len(rs), err)
 }

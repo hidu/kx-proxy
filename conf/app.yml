@@ -1,0 +1,9 @@
+Listen:
+  main: "{env.Listen|127.0.0.1:8085}"
+
+# 数据目录，当为空时，默认会使用应用根目录下的 data 目录
+DataDir: "{env.DataDir}"
+RunMode: "debug"
+
+Other:
+  SecretKey: "{env.SecretKey|62826f9fd2da8c2ab3f30d8533102476}"  # 加密秘钥，可选

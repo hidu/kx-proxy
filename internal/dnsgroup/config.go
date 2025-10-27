@@ -5,11 +5,14 @@
 package dnsgroup
 
 import (
+	"context"
+	"math/rand/v2"
+	"net"
 	"regexp"
 	"strings"
+	"time"
 
-	"github.com/fsgo/fsgo/fsnet/fsdns"
-	"github.com/fsgo/fsgo/fsnet/fsresolver"
+	"github.com/xanygo/anygo/xnet"
 )
 
 type Config struct {
@@ -24,54 +27,21 @@ type Config struct {
 	resolvers []*resolver
 }
 
-type ConfigNameServer struct {
-	Name  string
-	Hosts []string
-
-	// Timeout 使用此组配置查询的超时时间，可选，默认为 500
-	Timeout int
-
-	Domains []string
-}
-
 func (c *Config) parser() {
 	c.resolvers = make([]*resolver, 0)
 	if !c.Disable {
 		for _, item := range c.NameServer {
-			c.resolvers = append(c.resolvers, c.toResolver(item))
+			c.resolvers = append(c.resolvers, item.toResolver())
 		}
 	}
 
 	if len(c.resolvers) == 0 {
 		def := &resolver{
 			Name:     "fsnet_default",
-			Resolver: fsresolver.Default,
+			Resolver: xnet.LookupIPFunc(xnet.LookupIP),
 		}
 		c.resolvers = append(c.resolvers, def)
 	}
-}
-
-func (c *Config) toResolver(item *ConfigNameServer) *resolver {
-	client := &fsdns.Client{
-		HostsFile: fsdns.DefaultHostsFile,
-		Servers:   fsdns.ParserServers(item.Hosts),
-	}
-	rc := &fsresolver.Cached{
-		Invoker: client,
-	}
-	rc.Expiration = rc.ExpirationFromEnv()
-
-	res := &resolver{
-		Name:     item.Name,
-		Timeout:  item.Timeout,
-		Resolver: rc,
-	}
-
-	for _, domain := range item.Domains {
-		res.DomainRule = append(res.DomainRule, DomainRule(domain).ToRegexp())
-	}
-
-	return res
 }
 
 func (c *Config) ToGroup() *ResolverGroup {
@@ -96,9 +66,7 @@ func (c *Config) findResolvers(domain string) []*resolver {
 		return c.resolvers
 	}
 
-	// 其他的 dns 服务配置放在后面作为备份
 	matches = append(matches, backup...)
-
 	return matches
 }
 
@@ -109,4 +77,50 @@ func (dr DomainRule) ToRegexp() *regexp.Regexp {
 	str = strings.ReplaceAll(str, regexp.QuoteMeta("."), ".")
 	str = strings.ReplaceAll(str, regexp.QuoteMeta("*"), "*")
 	return regexp.MustCompile("^" + str + "$")
+}
+
+type ConfigNameServer struct {
+	Name  string
+	Hosts []string
+
+	// Timeout 使用此组配置查询的超时时间，可选，默认为 500
+	Timeout int
+
+	Domains []string
+}
+
+func (cn *ConfigNameServer) getTimeout() time.Duration {
+	if cn.Timeout > 0 {
+		return time.Duration(cn.Timeout) * time.Millisecond
+	}
+	return 200 * time.Millisecond
+}
+
+func (cn *ConfigNameServer) parser() *net.Resolver {
+	if len(cn.Hosts) == 0 {
+		panic("empty hosts")
+	}
+	return &net.Resolver{
+		PreferGo: true,
+		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+			d := net.Dialer{}
+			ctx, cancel := context.WithTimeout(ctx, cn.getTimeout())
+			defer cancel()
+			idx := rand.IntN(len(cn.Hosts))
+			return d.DialContext(ctx, "udp", cn.Hosts[idx])
+		},
+	}
+}
+
+func (cn *ConfigNameServer) toResolver() *resolver {
+	res := &resolver{
+		Name:     cn.Name,
+		Timeout:  cn.Timeout,
+		Resolver: cn.parser(),
+	}
+
+	for _, domain := range cn.Domains {
+		res.DomainRule = append(res.DomainRule, DomainRule(domain).ToRegexp())
+	}
+	return res
 }
